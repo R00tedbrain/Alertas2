@@ -1,30 +1,28 @@
 import 'dart:async';
 import 'dart:ui';
 import 'dart:io';
-import 'package:flutter/widgets.dart';
-import 'package:geolocator/geolocator.dart';
 import 'dart:math' as math;
 
+import 'package:flutter/widgets.dart';
+import 'package:flutter/services.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:flutter_background_service_ios/flutter_background_service_ios.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:logger/logger.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'package:flutter/services.dart';
 
 import '../constants/app_constants.dart';
-import 'audio_service.dart';
-import 'location_service.dart';
-import 'telegram_service.dart';
+import '../services/audio_service.dart';
+import '../services/location_service.dart';
+import '../services/telegram_service.dart';
+import '../services/config_service.dart';
 import '../../data/models/app_config.dart';
 import '../../data/models/emergency_contact.dart';
 
 // Anotación crucial para que la clase sea accesible desde código nativo
 @pragma('vm:entry-point')
 class BackgroundAlertService {
-  // Logger
-  final Logger _logger = Logger();
-
   // Servicios
   final LocationService _locationService = LocationService();
   final AudioService _audioService = AudioService();
@@ -34,8 +32,13 @@ class BackgroundAlertService {
   bool _isAlertActive = false;
 
   // Servicio en segundo plano
-  final FlutterBackgroundService _backgroundService =
-      FlutterBackgroundService();
+  late FlutterBackgroundService _backgroundService;
+
+  // Canal de método para comunicación nativa
+  late MethodChannel _backgroundChannel;
+
+  // Logger
+  final _logger = Logger();
 
   // Notificaciones
   final FlutterLocalNotificationsPlugin _notifications =
@@ -56,6 +59,12 @@ class BackgroundAlertService {
   // Inicializar
   Future<void> initialize() async {
     await _initializeNotifications();
+    _backgroundService = FlutterBackgroundService();
+
+    // Configurar el canal para comunicación nativa
+    _setupBackgroundTasksChannel();
+
+    // Inicializar el servicio en segundo plano
     await _initializeBackgroundService();
   }
 
@@ -93,81 +102,245 @@ class BackgroundAlertService {
       ),
     );
 
+    // PASO 1: Iniciar el servicio después de configurarlo
+    print('Iniciando servicio en segundo plano');
+    await _backgroundService.startService();
+
     // Registrar las identificaciones de tarea en iOS
     if (Platform.isIOS) {
       await _registerBackgroundTasks();
+
+      // PASO 2: Programar las tareas BGTask para iOS
+      print('Programando tareas BGTask para iOS');
+      try {
+        // Primero inicializar ConfigService para obtener configuración
+        final configService = ConfigService();
+        await configService.initialize();
+        final alertSettings = configService.alertSettings;
+
+        // Usar el canal para programar tareas
+        await _scheduleBGTasksManually();
+
+        print('Tareas programadas manualmente desde Flutter');
+      } catch (e) {
+        print('Error al programar tareas BGTask: $e');
+      }
+    }
+  }
+
+  // Método para programar tareas BGTask manualmente a través del MethodChannel
+  Future<void> _scheduleBGTasksManually() async {
+    try {
+      // Llamar a los métodos nativos correspondientes
+      await _backgroundChannel.invokeMethod('scheduleTasks', {
+        'refresh': {
+          'id': 'com.alerta.telegram.refresh',
+          'delay': 60, // segundos
+        },
+        'processing': {
+          'id': 'com.alerta.telegram.processing',
+          'delay': 15 * 60, // 15 minutos en segundos
+        },
+        'audio': {
+          'id': 'com.alerta.telegram.audio',
+          'delay': 60, // segundos
+        },
+      });
+
+      print(
+        '✅ Tareas en segundo plano programadas correctamente desde Flutter',
+      );
+    } catch (e) {
+      print('❌ Error al programar tareas BGTask manualmente: $e');
     }
   }
 
   // Añadir una nueva función para registrar las tareas de fondo en iOS
-  Future<void> _registerBackgroundTasks() async {
-    if (!Platform.isIOS) return;
+  Future<bool> _registerBackgroundTasks() async {
+    print('🐛 Registrando tareas en segundo plano para iOS');
 
-    try {
-      _logger.i('Registrando tareas en segundo plano para iOS');
-
-      // Verificamos primero si la aplicación tiene los permisos adecuados
-      final permissionStatus = await Permission.microphone.status;
-      if (permissionStatus != PermissionStatus.granted) {
-        _logger.w('Permiso de micrófono no concedido, solicitando...');
-        await Permission.microphone.request();
-      }
-
-      // Registrar identificadores de tareas en segundo plano manualmente
-      const MethodChannel channel = MethodChannel(
-        'com.alerta.telegram/background_tasks',
-      );
-
-      final Map<String, dynamic> taskIds = {
-        'identifiers': [
-          'com.alerta.telegram.refresh',
-          'com.alerta.telegram.processing',
-          'com.alerta.telegram.audio',
-        ],
-      };
-
+    if (Platform.isIOS) {
       try {
-        _logger.d('Invocando registerBackgroundTasks en canal nativo');
-        final bool? result = await channel.invokeMethod<bool>(
+        // Para iOS, manejar el registro a través del canal nativo
+        print('🐛 Invocando registerBackgroundTasks en canal nativo');
+        final result = await _backgroundChannel.invokeMethod(
           'registerBackgroundTasks',
-          taskIds,
+          {
+            'identifiers': [
+              'com.alerta.telegram.refresh',
+              'com.alerta.telegram.processing',
+              'com.alerta.telegram.audio',
+            ],
+          },
         );
-        _logger.i('Tareas en segundo plano registradas con resultado: $result');
+        print('💡 Tareas en segundo plano registradas con resultado: $result');
 
-        // Verificar si hay respuesta
-        if (result == null) {
-          _logger.w(
-            'No se recibió respuesta al registrar tareas en segundo plano',
-          );
-        }
+        // Configurar manejo adicional de tareas
+        print('🐛 Configurando tareas en segundo plano adicionales');
+        final additionalResult = await _backgroundChannel.invokeMethod(
+          'setupBackgroundTasks',
+        );
+        print('💡 Configuración adicional completada: $additionalResult');
 
-        // Ejecutar también setupBackgroundTasks para asegurar la configuración
-        _logger.d('Configurando tareas en segundo plano adicionales');
-        final setupResult = await channel
-            .invokeMethod<bool>('setupBackgroundTasks', {
-              'refresh': 'com.alerta.telegram.refresh',
-              'processing': 'com.alerta.telegram.processing',
-              'audio': 'com.alerta.telegram.audio',
-            });
-        _logger.i('Configuración adicional completada: $setupResult');
+        return result == true;
       } catch (e) {
-        _logger.e('Error específico al llamar al método nativo: $e');
-        // Continuamos de todos modos, ya que este es un paso adicional de seguridad
-
-        // Si fallaron las llamadas al canal, posiblemente el canal no está configurado
-        // correctamente. Registramos este error para depuración.
-        _logger.e(
-          'Posible causa: El MethodChannel no está correctamente configurado en AppDelegate.swift',
-        );
-        _logger.e(
-          'Comprueba que setupBackgroundTasksChannel() está configurado y se ejecuta',
-        );
+        print('Error al registrar tareas en segundo plano para iOS: $e');
+        return false;
       }
+    }
+
+    // En Android, usar el enfoque nativo de flutter_background_service
+    return true;
+  }
+
+  // Configurar el canal de comunicación para tareas en segundo plano
+  void _setupBackgroundTasksChannel() {
+    _backgroundChannel = const MethodChannel(
+      'com.alerta.telegram/background_tasks',
+    );
+
+    // Configurar manejadores para métodos invocados desde nativo
+    _backgroundChannel.setMethodCallHandler((call) async {
+      print('Método invocado desde nativo: ${call.method}');
+
+      switch (call.method) {
+        case 'updateStatus':
+          // Actualizar el estado del servicio
+          final Map<String, dynamic> args = call.arguments;
+          final String status = args['status'];
+          final bool isActive = args['isActive'];
+          final int timestamp = args['timestamp'];
+
+          print(
+            'Estado actualizado: $status, Activo: $isActive, Timestamp: $timestamp',
+          );
+          return true;
+
+        case 'startBackgroundFetch':
+          // Manejar la solicitud de ejecución en segundo plano desde iOS
+          print('⚠️ Recibido startBackgroundFetch desde iOS');
+          final Map<String, dynamic> args = call.arguments;
+          final String taskId = args['taskId'];
+
+          print('⚠️ Tarea en segundo plano solicitada: $taskId');
+
+          try {
+            // Cargar configuración
+            final configService = await _getConfigService();
+            if (configService == null) {
+              print('❌ ERROR: No se pudo obtener ConfigService');
+              return false;
+            }
+
+            final token = configService.telegramBotToken;
+            final contacts = configService.emergencyContacts;
+
+            if (token.isEmpty || contacts.isEmpty) {
+              print(
+                '❌ ERROR: Configuración incompleta para la alerta en segundo plano',
+              );
+              return false;
+            }
+
+            // Inicializar servicio de Telegram
+            final telegramService = TelegramService();
+            telegramService.initialize(token);
+
+            // Obtener ubicación
+            final locationService = LocationService();
+            print('⏳ Obteniendo ubicación para envío en segundo plano...');
+            final position = await locationService.getCurrentLocation();
+
+            if (position == null) {
+              print('❌ ERROR: No se pudo obtener ubicación');
+
+              // Intentar enviar mensaje sin ubicación
+              print(
+                '⏳ INICIANDO ENVÍO DE MENSAJE SIN UBICACIÓN a Telegram (BGTask)',
+              );
+              try {
+                await telegramService.sendMessageToAllContacts(
+                  contacts,
+                  '🚨 ALERTA AUTOMÁTICA: Actualización periódica (sin ubicación disponible)',
+                  markdown: false,
+                );
+                print(
+                  '✅ Mensaje enviado exitosamente desde tarea en segundo plano (sin ubicación)',
+                );
+                return true;
+              } catch (e) {
+                print('❌ ERROR al enviar mensaje desde BGTask: $e');
+                return false;
+              }
+            } else {
+              // Enviar mensaje con ubicación
+              print(
+                '⏳ INICIANDO ENVÍO DE MENSAJE CON UBICACIÓN a Telegram (BGTask)',
+              );
+              try {
+                // Primero enviar mensaje
+                await telegramService.sendMessageToAllContacts(
+                  contacts,
+                  '🚨 ALERTA AUTOMÁTICA: Ubicación actualizada',
+                  markdown: false,
+                );
+                print('✅ Mensaje enviado exitosamente desde BGTask');
+
+                // Luego intentar enviar ubicación
+                await telegramService.sendLocationToAllContacts(
+                  contacts,
+                  position,
+                );
+                print('✅ Ubicación enviada exitosamente desde BGTask');
+                return true;
+              } catch (e) {
+                print('❌ ERROR al enviar actualizaciones desde BGTask: $e');
+
+                // Intentar con formato alternativo
+                try {
+                  final locationText =
+                      'Lat: ${position.latitude}, Lng: ${position.longitude}';
+                  final mapsLink =
+                      'https://maps.google.com/maps?q=${position.latitude},${position.longitude}';
+
+                  await telegramService.sendMessageToAllContacts(
+                    contacts,
+                    '🚨 ALERTA: Mi ubicación actual: $locationText\n\nVer en mapa: $mapsLink',
+                    markdown: false,
+                  );
+                  print(
+                    '✅ Texto de ubicación enviado como alternativa desde BGTask',
+                  );
+                  return true;
+                } catch (retryError) {
+                  print('❌ ERROR en segundo intento desde BGTask: $retryError');
+                  return false;
+                }
+              }
+            }
+          } catch (e) {
+            print('❌ ERROR CRÍTICO en BGTask: $e');
+            return false;
+          }
+
+        default:
+          throw PlatformException(
+            code: 'Unimplemented',
+            message: 'Método no implementado: ${call.method}',
+          );
+      }
+    });
+  }
+
+  // Método auxiliar para obtener ConfigService inicializado
+  Future<ConfigService?> _getConfigService() async {
+    try {
+      final configService = ConfigService();
+      await configService.initialize();
+      return configService;
     } catch (e) {
-      _logger.e(
-        'Error general al registrar tareas en segundo plano para iOS: $e',
-      );
-      // Continuamos de todos modos, ya que este es un paso adicional de seguridad
+      print('Error al inicializar ConfigService: $e');
+      return null;
     }
   }
 
@@ -318,12 +491,33 @@ class BackgroundAlertService {
     AlertSettings settings,
   ) async {
     final logger = Logger();
+    print('▶️ _startAlert entró - PUNTO DE ENTRADA CRÍTICO');
     print('Iniciando alerta en segundo plano');
     print('Token: $token');
     print('Cantidad de contactos: ${contacts.length}');
-    print(
-      'Contactos: ${contacts.map((c) => '${c.name}: ${c.chatId}').join(', ')}',
-    );
+
+    // Información detallada sobre la lista de contactos para depuración
+    print('Contactos detallados:');
+    if (contacts.isEmpty) {
+      print('ERROR CRÍTICO: Lista de contactos está VACÍA');
+    } else {
+      for (var i = 0; i < contacts.length; i++) {
+        final contact = contacts[i];
+        print(
+          '  Contacto #$i - Nombre: ${contact.name}, Chat ID: ${contact.chatId}',
+        );
+        // Verificar que el chat ID sea válido
+        try {
+          final chatIdNum = int.parse(contact.chatId);
+          print('    Chat ID válido: $chatIdNum');
+        } catch (e) {
+          print(
+            '    ERROR: Chat ID inválido, no es un número: ${contact.chatId}',
+          );
+        }
+      }
+    }
+
     print('Configuración: ${settings.toJson()}');
 
     final locationService = LocationService();
@@ -554,7 +748,7 @@ class BackgroundAlertService {
 
     // Enviar mensaje inicial con la ubicación actual
     try {
-      print('Obteniendo ubicación actual...');
+      print('⏳ Obteniendo ubicación actual para enviar mensaje inicial...');
       int locationRetries = 0;
       Position? position;
 
@@ -578,39 +772,47 @@ class BackgroundAlertService {
 
       if (position != null) {
         print(
-          'Ubicación obtenida: Lat ${position.latitude}, Lng ${position.longitude}',
+          '✅ Ubicación obtenida: Lat ${position.latitude}, Lng ${position.longitude}',
         );
 
         // Enviar mensaje de inicio
-        print('Enviando mensaje inicial a ${contacts.length} contactos');
+        print('⏳ Enviando mensaje inicial a ${contacts.length} contactos');
         bool messageSent = false;
         int messageRetries = 0;
 
         while (!messageSent && messageRetries < 3) {
           try {
+            print(
+              '⏳ INICIANDO ENVÍO DE MENSAJE CRÍTICO a Telegram - intento ${messageRetries + 1}',
+            );
             await telegramService.sendMessageToAllContacts(
               contacts,
               '🚨 *ALERTA DE EMERGENCIA* 🚨\n\nSe ha activado una alerta. Se enviarán actualizaciones periódicas.',
               markdown: true,
             );
             messageSent = true;
-            print('Mensaje inicial enviado correctamente');
+            print('✅ Mensaje inicial enviado correctamente');
           } catch (e) {
             print(
-              'ERROR al enviar mensaje inicial (intento ${messageRetries + 1}): $e',
+              '❌ ERROR al enviar mensaje inicial (intento ${messageRetries + 1}): $e',
             );
 
             // Intentar nuevamente con un mensaje más simple
             try {
+              print(
+                '⏳ Reintentando con mensaje simple - intento ${messageRetries + 1}',
+              );
               await telegramService.sendMessageToAllContacts(
                 contacts,
                 'ALERTA DE EMERGENCIA: Se ha activado una alerta.',
                 markdown: false,
               );
               messageSent = true;
-              print('Mensaje simple enviado correctamente');
+              print('✅ Mensaje simple enviado correctamente');
             } catch (retryError) {
-              print('ERROR en segundo intento de mensaje inicial: $retryError');
+              print(
+                '❌ ERROR en segundo intento de mensaje inicial: $retryError',
+              );
             }
 
             messageRetries++;
@@ -621,7 +823,7 @@ class BackgroundAlertService {
         }
 
         // Enviar ubicación inicial
-        print('Enviando ubicación inicial');
+        print('⏳ INICIANDO ENVÍO DE UBICACIÓN a Telegram');
         bool locationSent = false;
         int locationSendRetries = 0;
 
@@ -629,14 +831,15 @@ class BackgroundAlertService {
           try {
             await telegramService.sendLocationToAllContacts(contacts, position);
             locationSent = true;
-            print('Ubicación inicial enviada correctamente');
+            print('✅ Ubicación inicial enviada correctamente');
           } catch (e) {
             print(
-              'ERROR al enviar ubicación inicial (intento ${locationSendRetries + 1}): $e',
+              '❌ ERROR al enviar ubicación inicial (intento ${locationSendRetries + 1}): $e',
             );
 
             // Intentar con un mensaje que incluya la ubicación en texto
             try {
+              print('⏳ Reintentando con mensaje de texto de ubicación');
               final locationText = locationService.formatLocationMessage(
                 position,
               );
@@ -647,10 +850,10 @@ class BackgroundAlertService {
                 markdown: false,
               );
               locationSent = true;
-              print('Texto de ubicación enviado como alternativa');
+              print('✅ Texto de ubicación enviado como alternativa');
             } catch (retryError) {
               print(
-                'ERROR en segundo intento de envío de ubicación: $retryError',
+                '❌ ERROR en segundo intento de envío de ubicación: $retryError',
               );
             }
 
@@ -662,37 +865,45 @@ class BackgroundAlertService {
         }
 
         if (!messageSent && !locationSent) {
-          print('ADVERTENCIA: No se pudo enviar ninguna información inicial');
+          print(
+            '⚠️ ADVERTENCIA: No se pudo enviar ninguna información inicial',
+          );
           // Intentar un último método alternativo
           try {
+            print('⏳ Último intento de mensaje básico');
             await telegramService.sendMessageToAllContacts(
               contacts,
               'Alerta activada. Por favor contactar al número de emergencia.',
               markdown: false,
             );
-            print('Mensaje básico enviado como último recurso');
+            print('✅ Mensaje básico enviado como último recurso');
           } catch (e) {
-            print('ERROR: Imposible enviar cualquier tipo de mensaje: $e');
+            print(
+              '❌ ERROR CRÍTICO: Imposible enviar cualquier tipo de mensaje: $e',
+            );
           }
         }
 
         // Programar envíos periódicos de ubicación
         print(
-          'Configurando timer para ubicación cada ${settings.locationUpdateIntervalSeconds} segundos',
+          '⏳ Configurando timer para ubicación cada ${settings.locationUpdateIntervalSeconds} segundos',
         );
         locationTimer = Timer.periodic(
           Duration(seconds: settings.locationUpdateIntervalSeconds),
           (timer) async {
             try {
-              print('Timer de ubicación activado, obteniendo nueva posición');
+              print('⏳ Timer de ubicación activado, obteniendo nueva posición');
               final newPosition = await locationService.getCurrentLocation();
               if (newPosition != null) {
                 print(
-                  'Nueva posición obtenida: Lat ${newPosition.latitude}, Lng ${newPosition.longitude}',
+                  '✅ Nueva posición obtenida: Lat ${newPosition.latitude}, Lng ${newPosition.longitude}',
                 );
 
                 // Enviar actualización como mensaje para mayor confiabilidad
                 try {
+                  print(
+                    '⏳ INICIANDO ENVÍO DE MENSAJE DE ACTUALIZACIÓN a Telegram',
+                  );
                   final locationText = locationService.formatLocationMessage(
                     newPosition,
                   );
@@ -704,55 +915,57 @@ class BackgroundAlertService {
                     '📍 *Actualización de ubicación*\n\n$locationText\n\nVer en mapa: $mapsLink',
                     markdown: true,
                   );
-                  print('Mensaje de ubicación enviado correctamente');
+                  print('✅ Mensaje de ubicación enviado correctamente');
                 } catch (e) {
-                  print('Error al enviar mensaje de ubicación: $e');
+                  print('❌ Error al enviar mensaje de ubicación: $e');
 
                   // Intento con formato simple
                   try {
+                    print('⏳ Reintentando con formato simple');
                     await telegramService.sendMessageToAllContacts(
                       contacts,
                       'Actualización de ubicación: ${newPosition.latitude}, ${newPosition.longitude}',
                       markdown: false,
                     );
-                    print('Mensaje simple de ubicación enviado');
+                    print('✅ Mensaje simple de ubicación enviado');
                   } catch (retryError) {
                     print(
-                      'No se pudo enviar ningún mensaje de ubicación: $retryError',
+                      '❌ No se pudo enviar ningún mensaje de ubicación: $retryError',
                     );
                   }
                 }
 
                 // También intentar enviar como ubicación nativa
                 try {
+                  print('⏳ INICIANDO ENVÍO DE UBICACIÓN NATIVA a Telegram');
                   await telegramService.sendLocationToAllContacts(
                     contacts,
                     newPosition,
                   );
-                  print('Ubicación nativa enviada correctamente');
+                  print('✅ Ubicación nativa enviada correctamente');
                 } catch (e) {
-                  print('Error al enviar ubicación nativa: $e');
+                  print('❌ Error al enviar ubicación nativa: $e');
                 }
               } else {
-                print('No se pudo obtener la nueva posición');
+                print('❌ No se pudo obtener la nueva posición');
               }
             } catch (e) {
-              print('Error al enviar ubicación periódica: $e');
+              print('❌ Error al enviar ubicación periódica: $e');
               logger.e('Error al enviar ubicación periódica: $e');
             }
           },
         );
-        print('Timer de ubicación configurado');
+        print('✅ Timer de ubicación configurado');
 
         // Programar grabaciones y envíos de audio
         print(
-          'Configurando timer de audio cada ${settings.audioRecordingIntervalSeconds} segundos',
+          '⏳ Configurando timer de audio cada ${settings.audioRecordingIntervalSeconds} segundos',
         );
         audioTimer = Timer.periodic(Duration(seconds: settings.audioRecordingIntervalSeconds), (
           timer,
         ) async {
           try {
-            print('Timer de audio activado, iniciando grabación');
+            print('⏳ Timer de audio activado, iniciando grabación');
 
             // Para iOS, manejar la sesión de audio con más cuidado
             bool canRecordAudio = true;
@@ -928,28 +1141,29 @@ class BackgroundAlertService {
               }
             }
           } catch (e) {
-            print('Error al grabar y enviar audio: $e');
+            print('❌ Error al grabar y enviar audio: $e');
             logger.e('Error al grabar y enviar audio: $e');
           }
         });
-        print('Timer de audio configurado');
+        print('✅ Timer de audio configurado');
       } else {
-        print('ERROR: No se pudo obtener la posición inicial');
+        print('❌ ERROR: No se pudo obtener la posición inicial');
 
         // Intentar enviar un mensaje a pesar de no tener ubicación
         try {
+          print('⏳ INICIANDO ENVÍO DE MENSAJE SIN UBICACIÓN a Telegram');
           await telegramService.sendMessageToAllContacts(
             contacts,
             '🚨 *ALERTA DE EMERGENCIA* 🚨\n\nSe ha activado una alerta. No se pudo obtener la ubicación actual.',
             markdown: true,
           );
-          print('Mensaje de alerta sin ubicación enviado');
+          print('✅ Mensaje de alerta sin ubicación enviado');
         } catch (e) {
-          print('ERROR al enviar mensaje de alerta sin ubicación: $e');
+          print('❌ ERROR al enviar mensaje de alerta sin ubicación: $e');
         }
       }
     } catch (e) {
-      print('ERROR al iniciar alerta: $e');
+      print('❌ ERROR CRÍTICO al iniciar alerta: $e');
       logger.e('Error al iniciar alerta: $e');
 
       // Limpiar recursos en caso de error
@@ -1315,4 +1529,144 @@ class BackgroundAlertService {
   // Suscribirse a actualizaciones del servicio
   Stream<Map<String, dynamic>?> get onServiceUpdate =>
       _backgroundService.on('updateStatus');
+}
+
+// Punto de entrada principal para iOS BGTask
+@pragma('vm:entry-point')
+void backgroundCallback() {
+  print('▶️ backgroundCallback de iOS BGTask inicializado');
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // Canal unificado para comunicación con iOS
+  const MethodChannel backgroundChannel = MethodChannel(
+    'com.alerta.telegram/background_tasks',
+  );
+
+  // Manejar mensajes de iOS
+  backgroundChannel.setMethodCallHandler((call) async {
+    print('📱 iOS invocó método en dart: ${call.method}');
+
+    // UNIFICACIÓN: Escuchar el mismo método que se invoca desde Swift
+    if (call.method == 'startBackgroundFetch' ||
+        call.method == 'onBackgroundTask') {
+      final Map<String, dynamic> args = call.arguments ?? {};
+      final String taskId = args['taskId'] ?? 'desconocido';
+      final double timestamp =
+          args['timestamp'] ?? DateTime.now().millisecondsSinceEpoch / 1000;
+
+      print(
+        '▶️ Tarea en segundo plano recibida: $taskId (timestamp: $timestamp)',
+      );
+
+      try {
+        // Cargar la configuración para la alerta
+        final configService = ConfigService();
+        await configService.initialize();
+
+        final token = configService.telegramBotToken;
+        final contacts = configService.emergencyContacts;
+        final settings = configService.alertSettings;
+
+        print('▶️ Configuración cargada para tarea en segundo plano:');
+        print(
+          '▶️ Token: ${token.isNotEmpty ? '${token.substring(0, 6)}...' : 'VACÍO'}',
+        );
+        print('▶️ Contactos: ${contacts.length}');
+
+        if (token.isEmpty || contacts.isEmpty) {
+          print('▶️ ERROR: Configuración incompleta para la alerta');
+          await backgroundChannel.invokeMethod('taskComplete');
+          return;
+        }
+
+        // Inicializar los servicios necesarios
+        final telegramService = TelegramService();
+        telegramService.initialize(token);
+
+        // Verificar el token
+        final tokenValid = await telegramService.verifyToken();
+        if (!tokenValid) {
+          print('▶️ ERROR: Token de Telegram inválido');
+          await backgroundChannel.invokeMethod('taskComplete');
+          return;
+        }
+
+        // Obtener ubicación actual
+        final locationService = LocationService();
+        print('⏳ Obteniendo ubicación para envío en segundo plano...');
+        final position = await locationService.getCurrentLocation();
+
+        if (position == null) {
+          print('▶️ ERROR: No se pudo obtener ubicación');
+
+          // Intentar enviar mensaje sin ubicación
+          print(
+            '⏳ INICIANDO ENVÍO DE MENSAJE SIN UBICACIÓN a Telegram (BGTask)',
+          );
+          try {
+            await telegramService.sendMessageToAllContacts(
+              contacts,
+              '🚨 ALERTA AUTOMÁTICA: Actualización periódica (sin ubicación disponible)',
+              markdown: false,
+            );
+            print('✅ Mensaje enviado exitosamente (sin ubicación)');
+          } catch (e) {
+            print('❌ ERROR al enviar mensaje: $e');
+          }
+        } else {
+          // Enviar mensaje con ubicación
+          print(
+            '⏳ INICIANDO ENVÍO DE MENSAJE CON UBICACIÓN a Telegram (BGTask)',
+          );
+          try {
+            // Primero enviar mensaje
+            await telegramService.sendMessageToAllContacts(
+              contacts,
+              '🚨 ALERTA AUTOMÁTICA: Actualización periódica',
+              markdown: false,
+            );
+            print('✅ Mensaje enviado exitosamente');
+
+            // Luego intentar enviar ubicación
+            await telegramService.sendLocationToAllContacts(contacts, position);
+            print('✅ Ubicación enviada exitosamente');
+          } catch (e) {
+            print('❌ ERROR al enviar actualizaciones: $e');
+
+            // Intentar con formato alternativo
+            try {
+              final locationText =
+                  'Lat: ${position.latitude}, Lng: ${position.longitude}';
+              final mapsLink =
+                  'https://maps.google.com/maps?q=${position.latitude},${position.longitude}';
+
+              await telegramService.sendMessageToAllContacts(
+                contacts,
+                '🚨 ALERTA: Mi ubicación actual: $locationText\n\nVer en mapa: $mapsLink',
+                markdown: false,
+              );
+              print('✅ Texto de ubicación enviado como alternativa');
+            } catch (retryError) {
+              print('❌ ERROR en segundo intento: $retryError');
+            }
+          }
+        }
+      } catch (e) {
+        print('▶️ ERROR CRÍTICO en tarea en segundo plano: $e');
+      } finally {
+        // Informar a iOS que hemos terminado
+        print('▶️ Finalizando tarea en segundo plano');
+        try {
+          await backgroundChannel.invokeMethod('taskComplete');
+        } catch (e) {
+          print('⚠️ No se pudo notificar finalización: $e');
+        }
+      }
+    }
+
+    return null;
+  });
+
+  // Confirmar que el callback está listo
+  print('▶️ backgroundCallback configurado y listo para recibir tareas');
 }

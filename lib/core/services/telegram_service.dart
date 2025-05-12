@@ -182,9 +182,11 @@ class TelegramService {
     String text, {
     bool markdown = false,
   }) async {
+    print('🔶 INICIO sendMessage - chatId: $chatId');
+
     if (!isInitialized) {
       print(
-        'ERROR: TelegramService no inicializado al intentar enviar mensaje',
+        '🔶 ERROR: TelegramService no inicializado al intentar enviar mensaje',
       );
       _logger.e('TelegramService no inicializado');
       return false;
@@ -197,21 +199,23 @@ class TelegramService {
         // Escapar caracteres especiales para MarkdownV2
         processedText = _escapeMarkdown(text);
       } catch (e) {
-        print('Error al escapar markdown, enviando como texto plano: $e');
+        print('🔶 Error al escapar markdown, enviando como texto plano: $e');
         markdown = false;
       }
     }
 
     // Para iOS, usar más reintentos
     final maxRetries = Platform.isIOS ? _maxRetries + 2 : _maxRetries;
+    print('🔶 Reintentos configurados: $maxRetries');
 
     return _withRetry<bool>(
       () async {
         try {
-          print('Enviando mensaje a chat $chatId');
+          print('🔶 Enviando mensaje a chat $chatId');
+          print('🔶 URL: $_baseUrl$_token/sendMessage');
           developer.log('Enviando mensaje a Telegram', name: 'TelegramService');
           print(
-            'Texto del mensaje: ${processedText.length > 50 ? '${processedText.substring(0, 50)}...' : processedText}',
+            '🔶 Texto del mensaje: ${processedText.length > 50 ? '${processedText.substring(0, 50)}...' : processedText}',
           );
 
           // Imprimir estado de la red
@@ -222,17 +226,28 @@ class TelegramService {
             );
           }
 
+          // Construir datos para el body
+          final Map<String, dynamic> bodyData = {
+            'chat_id': chatId,
+            'text': processedText,
+          };
+
+          if (markdown) {
+            bodyData['parse_mode'] = 'MarkdownV2';
+          }
+
+          print('🔶 Body de la solicitud: $bodyData');
+
           final response = await _dio.post(
             '$_baseUrl$_token/sendMessage',
-            data: {
-              'chat_id': chatId,
-              'text': processedText,
-              'parse_mode': markdown ? 'MarkdownV2' : null,
-            },
+            data: bodyData,
           );
 
+          print('🔶 Respuesta recibida - Código: ${response.statusCode}');
+
           if (response.statusCode == 200) {
-            print('Mensaje enviado exitosamente a $chatId');
+            print('🔶 Mensaje enviado exitosamente a $chatId');
+            print('🔶 Respuesta: ${response.data}');
             developer.log(
               'Mensaje enviado exitosamente',
               name: 'TelegramService',
@@ -240,8 +255,8 @@ class TelegramService {
             _logger.i('Mensaje enviado a $chatId');
             return true;
           } else {
-            print('ERROR al enviar mensaje: Código ${response.statusCode}');
-            print('Respuesta: ${response.data}');
+            print('🔶 ERROR al enviar mensaje: Código ${response.statusCode}');
+            print('🔶 Respuesta: ${response.data}');
             developer.log(
               'Error al enviar mensaje: ${response.statusCode}',
               name: 'TelegramService',
@@ -252,14 +267,15 @@ class TelegramService {
             // Si el error es por el formato markdown, reintentar sin markdown
             if (markdown &&
                 response.data.toString().contains('can\'t parse entities')) {
-              print('Error de formato markdown, reintentando sin markdown');
+              print('🔶 Error de formato markdown, reintentando sin markdown');
               return await sendMessage(chatId, text, markdown: false);
             }
 
             return false;
           }
         } on DioException catch (e) {
-          print('ERROR Dio al enviar mensaje: ${e.message}');
+          print('🔶 ERROR Dio al enviar mensaje: ${e.message}');
+          print('🔶 Tipo de error Dio: ${e.type}');
           developer.log(
             'ERROR Dio al enviar mensaje',
             name: 'TelegramService',
@@ -267,8 +283,8 @@ class TelegramService {
           );
 
           if (e.response != null) {
-            print('Código de error: ${e.response?.statusCode}');
-            print('Respuesta de error: ${e.response?.data}');
+            print('🔶 Código de error: ${e.response?.statusCode}');
+            print('🔶 Respuesta de error: ${e.response?.data}');
           }
 
           // Verificar errores específicos de red
@@ -282,6 +298,9 @@ class TelegramService {
 
             // En iOS, esperar un poco más antes de reintentar
             if (Platform.isIOS) {
+              print(
+                '🔶 iOS: Esperando 2 segundos adicionales antes de reintentar',
+              );
               await Future.delayed(const Duration(seconds: 2));
             }
           } else if (e.type == DioExceptionType.connectionError) {
@@ -292,6 +311,9 @@ class TelegramService {
 
             // En iOS, esperar un poco más para dar tiempo a la reconexión
             if (Platform.isIOS) {
+              print(
+                '🔶 iOS: Esperando 3 segundos adicionales por problema de conexión',
+              );
               await Future.delayed(const Duration(seconds: 3));
             }
           }
@@ -299,7 +321,7 @@ class TelegramService {
           _logger.e('Error Dio al enviar mensaje: ${e.message}');
           throw e; // Lanzar para que _withRetry reintente
         } catch (e) {
-          print('ERROR general al enviar mensaje: $e');
+          print('🔶 ERROR general al enviar mensaje: $e');
           developer.log(
             'ERROR general al enviar mensaje',
             name: 'TelegramService',
@@ -312,7 +334,7 @@ class TelegramService {
       operationName: 'envío de mensaje',
       maxRetries: maxRetries,
     ).catchError((e) {
-      print('Todos los reintentos fallaron para enviar mensaje: $e');
+      print('🔶 Todos los reintentos fallaron para enviar mensaje: $e');
       developer.log(
         'Todos los reintentos fallaron para enviar mensaje',
         name: 'TelegramService',
@@ -474,8 +496,11 @@ class TelegramService {
     String text, {
     bool markdown = false,
   }) async {
+    print('⚠️ INICIO sendMessageToAllContacts ⚠️');
+    print('⚠️ Número de contactos: ${contacts.length}');
+
     if (contacts.isEmpty) {
-      print('ADVERTENCIA: Lista de contactos vacía');
+      print('⚠️ ADVERTENCIA CRÍTICA: Lista de contactos vacía');
       _logger.w('Lista de contactos vacía al enviar mensaje');
       return false;
     }
@@ -483,28 +508,57 @@ class TelegramService {
     print('Enviando mensaje a ${contacts.length} contactos');
     bool allSuccess = true;
 
+    // Depuración de token
+    print(
+      '⚠️ Estado de inicialización: ${isInitialized ? 'INICIALIZADO' : 'NO INICIALIZADO'}',
+    );
+    print('⚠️ Token enmascarado: ${_maskToken(_token)}');
+
+    // Mostrar primeros caracteres del mensaje
+    print(
+      '⚠️ Mensaje a enviar (primeros 50 caracteres): ${text.length > 50 ? text.substring(0, 50) + '...' : text}',
+    );
+
     // Enviar a cada contacto secuencialmente
+    int contactIndex = 0;
     for (final contact in contacts) {
+      contactIndex++;
+      print(
+        '⚠️ Procesando contacto $contactIndex/${contacts.length}: ${contact.name} (${contact.chatId})',
+      );
+
       try {
+        print(
+          '⚠️ Intentando enviar mensaje a ${contact.name} (${contact.chatId})',
+        );
         final success = await sendMessage(
           contact.chatId,
           text,
           markdown: markdown,
         );
-        if (!success) {
+
+        if (success) {
+          print('⚠️ Mensaje enviado exitosamente a ${contact.name}');
+        } else {
           print(
-            'Fallo al enviar mensaje a ${contact.name} (${contact.chatId})',
+            '⚠️ Fallo al enviar mensaje a ${contact.name} (${contact.chatId})',
           );
           allSuccess = false;
         }
+
         // Pequeña pausa entre mensajes para no saturar la API
+        print('⚠️ Esperando 500ms antes del siguiente envío');
         await Future.delayed(const Duration(milliseconds: 500));
       } catch (e) {
-        print('Error al enviar mensaje a ${contact.name}: $e');
+        print('⚠️ ERROR CRÍTICO al enviar mensaje a ${contact.name}: $e');
+        _logger.e('Error al enviar mensaje a ${contact.name}: $e');
         allSuccess = false;
       }
     }
 
+    print(
+      '⚠️ FIN sendMessageToAllContacts: ${allSuccess ? 'TODOS ENVIADOS' : 'ALGUNOS FALLARON'}',
+    );
     return allSuccess;
   }
 

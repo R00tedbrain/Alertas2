@@ -43,6 +43,7 @@
 	<string>Se requiere acceso a la biblioteca de fotos para guardar grabaciones de audio para evidencia.</string>
 	<key>BGTaskSchedulerPermittedIdentifiers</key>
 	<array>
+		<string>com.alerta.telegram.apprefresh</string>
 		<string>com.alerta.telegram.refresh</string>
 		<string>com.alerta.telegram.processing</string>
 		<string>com.alerta.telegram.audio</string>
