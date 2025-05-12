@@ -467,7 +467,7 @@ class BackgroundAlertService {
           try {
             final audioService = AudioService();
             _log('Liberando recursos de audio en iOS desde el evento stop');
-            await audioService.dispose();
+            audioService.dispose();
             _log('Recursos de audio liberados correctamente');
           } catch (e) {
             _log('Error al liberar recursos de audio: $e');
@@ -534,10 +534,43 @@ class BackgroundAlertService {
 
     // Soporte para nombres antiguos - redireccionar al único evento 'stop'
     service.on('stopAlert').listen((event) {
-      _log(
-        'Recibida petición para detener alerta via stopAlert - redirigiendo a stop',
-      );
-      service.invoke('stop', {});
+      _log('Recibida petición para detener alerta via stopAlert');
+      try {
+        // 1. Cancelar todos los timers activos
+        _cancelAllTimers();
+        _log('Todos los timers cancelados');
+
+        // 2. Para iOS, liberar recursos de audio
+        if (Platform.isIOS) {
+          try {
+            final audioService = AudioService();
+            _log(
+              'Liberando recursos de audio en iOS desde el evento stopAlert',
+            );
+            audioService.dispose();
+            _log('Recursos de audio liberados correctamente');
+          } catch (e) {
+            _log('Error al liberar recursos de audio: $e');
+          }
+        }
+
+        // 3. Notificar al UI que la alerta se está deteniendo, pero el servicio continúa
+        service.invoke('updateStatus', {
+          'status': 'Alerta detenida (servicio sigue activo)',
+          'isActive': false,
+          'timestamp': DateTime.now().millisecondsSinceEpoch,
+        });
+        _log('Alerta detenida pero servicio mantenido activo');
+      } catch (e) {
+        _log('Error al detener la alerta: $e');
+
+        // Notificar error
+        service.invoke('updateStatus', {
+          'status': 'Error al detener alerta: ' + e.toString(),
+          'isActive': false,
+          'timestamp': DateTime.now().millisecondsSinceEpoch,
+        });
+      }
     });
 
     service.on('stopService').listen((event) {
@@ -1408,6 +1441,18 @@ class BackgroundAlertService {
       return false;
     }
 
+    // Verificar que el servicio esté activo, si no, iniciarlo
+    _log('Verificando si el servicio está activo');
+    if (!await _backgroundService.isRunning()) {
+      _log('El servicio no está activo, iniciándolo');
+      await _backgroundService.startService();
+      // Dar tiempo a que el servicio se inicie completamente
+      await Future.delayed(const Duration(seconds: 2));
+      _log('Servicio iniciado correctamente');
+    } else {
+      _log('El servicio ya está activo');
+    }
+
     // En iOS, preparar servicios de audio antes de iniciar
     if (Platform.isIOS) {
       try {
@@ -1698,16 +1743,18 @@ class BackgroundAlertService {
         }
       }
 
-      // Usar la API oficial del plugin para detener el servicio
-      _log('Deteniendo servicio usando la API oficial del plugin');
-      // Esta llamada maneja internamente la secuencia de limpieza y detención
+      // CAMBIO IMPORTANTE: No detenemos el servicio completo, solo enviamos el comando para detener
+      // la lógica de alerta, pero mantenemos el servicio vivo para futuras alertas
+      _log(
+        'Enviando comando para detener la alerta pero manteniendo el servicio activo',
+      );
       final FlutterBackgroundService service = FlutterBackgroundService();
-      service.invoke("stop", {
+      service.invoke("stopAlert", {
         'reason': 'user_stopped',
         'timestamp': DateTime.now().millisecondsSinceEpoch,
       });
 
-      _log('Comando para detener el servicio enviado correctamente');
+      _log('Comando para detener la alerta enviado correctamente');
       _isAlertActive = false;
       return true;
     } catch (e) {
@@ -1725,11 +1772,42 @@ class BackgroundAlertService {
     }
   }
 
+  // Método para detener completamente el servicio en segundo plano
+  // Usar solo cuando realmente se quiera apagar todo el servicio (ej: logout)
+  Future<bool> stopBackgroundService() async {
+    try {
+      _log('Deteniendo completamente el servicio en segundo plano');
+
+      // Primero asegurarse de que la alerta está detenida
+      if (_isAlertActive) {
+        await stopAlert();
+      }
+
+      // Ahora sí detener el servicio completamente
+      final FlutterBackgroundService service = FlutterBackgroundService();
+      service.invoke("stop", {
+        'reason': 'service_shutdown',
+        'timestamp': DateTime.now().millisecondsSinceEpoch,
+      });
+
+      _log('Comando para detener completamente el servicio enviado');
+      return true;
+    } catch (e) {
+      _log('ERROR al detener servicio en segundo plano: $e');
+      _logger.e('Error al detener servicio en segundo plano: $e');
+      return false;
+    }
+  }
+
   // Método para limpiar timers locales (no estáticos)
   void _clearTimers() {
     _log('Cancelando timers locales...');
-    // Nota: este método limpia timers locales,
-    // mientras que _cancelAllTimers() limpia los timers estáticos
+    // Implementación real para cancelar los timers
+    List<Timer> timersToCancel = List.from(_timers);
+    for (var timer in timersToCancel) {
+      timer.cancel();
+    }
+    _timers.clear();
     _log('Todos los timers locales cancelados');
   }
 }
