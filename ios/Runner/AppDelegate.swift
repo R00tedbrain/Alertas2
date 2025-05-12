@@ -255,6 +255,33 @@ import AVFoundation
           result(FlutterError(code: "AUDIO_ERROR", message: "Error al desactivar sesión de audio: \(error)", details: nil))
         }
         
+      case "cancelBackgroundTasks":
+        // Cancelar todas las tareas en segundo plano programadas
+        if #available(iOS 13.0, *) {
+          print("Cancelando todas las tareas en segundo plano programadas")
+          
+          // Lista de identificadores de tareas
+          let taskIdentifiers = [
+            "com.alerta.telegram.refresh",
+            "com.alerta.telegram.processing",
+            "com.alerta.telegram.audio"
+          ]
+          
+          // Cancelar cada tarea
+          for identifier in taskIdentifiers {
+            BGTaskScheduler.shared.cancel(taskRequestWithIdentifier: identifier)
+            print("Tarea cancelada: \(identifier)")
+          }
+          
+          // Registro de confirmación
+          print("Todas las tareas en segundo plano han sido canceladas")
+          result(true)
+        } else {
+          // Para versiones anteriores de iOS, simplemente devolvemos true
+          print("Cancelación de tareas no disponible en esta versión de iOS")
+          result(true)
+        }
+        
       default:
         result(FlutterMethodNotImplemented)
       }

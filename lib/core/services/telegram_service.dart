@@ -490,144 +490,122 @@ class TelegramService {
     });
   }
 
-  // Enviar mensaje a todos los contactos de emergencia
+  // Método unificado para enviar cualquier tipo de contenido con reintentos
+  Future<bool> sendWithRetry<T>({
+    required List<EmergencyContact> contacts,
+    required String operationName,
+    required Future<bool> Function(EmergencyContact contact) sendFunction,
+    int maxRetries = 3,
+  }) async {
+    if (!isInitialized) {
+      print(
+        'ERROR: TelegramService no inicializado al intentar $operationName',
+      );
+      _logger.e('TelegramService no inicializado');
+      return false;
+    }
+
+    if (contacts.isEmpty) {
+      print('ERROR: Lista de contactos vacía para $operationName');
+      return false;
+    }
+
+    bool allSuccessful = true;
+    int successCount = 0;
+
+    for (final contact in contacts) {
+      try {
+        bool success = false;
+        int attempts = 0;
+
+        while (!success && attempts < maxRetries) {
+          attempts++;
+          try {
+            success = await sendFunction(contact);
+
+            if (success) {
+              successCount++;
+              if (attempts > 1) {
+                print(
+                  '$operationName exitoso para ${contact.name} (${contact.chatId}) después de $attempts intentos',
+                );
+              }
+              break;
+            }
+          } catch (e) {
+            print('Error en intento $attempts para ${contact.name}: $e');
+
+            if (attempts < maxRetries) {
+              // Espera exponencial entre reintentos
+              final waitTime = Duration(
+                milliseconds: 1000 * (1 << (attempts - 1)),
+              );
+              print('Reintentando en ${waitTime.inMilliseconds}ms...');
+              await Future.delayed(waitTime);
+            }
+          }
+        }
+
+        if (!success) {
+          allSuccessful = false;
+          print(
+            'No se pudo enviar $operationName a ${contact.name} después de $maxRetries intentos',
+          );
+        }
+      } catch (e) {
+        allSuccessful = false;
+        print('Error al procesar $operationName para ${contact.name}: $e');
+      }
+    }
+
+    print(
+      '$operationName completado: $successCount/${contacts.length} exitosos',
+    );
+    return successCount > 0; // Devuelve true si al menos uno fue exitoso
+  }
+
+  // Enviar mensaje a todos los contactos con reintentos
   Future<bool> sendMessageToAllContacts(
     List<EmergencyContact> contacts,
     String text, {
     bool markdown = false,
+    int maxRetries = 3,
   }) async {
-    print('⚠️ INICIO sendMessageToAllContacts ⚠️');
-    print('⚠️ Número de contactos: ${contacts.length}');
-
-    if (contacts.isEmpty) {
-      print('⚠️ ADVERTENCIA CRÍTICA: Lista de contactos vacía');
-      _logger.w('Lista de contactos vacía al enviar mensaje');
-      return false;
-    }
-
-    print('Enviando mensaje a ${contacts.length} contactos');
-    bool allSuccess = true;
-
-    // Depuración de token
-    print(
-      '⚠️ Estado de inicialización: ${isInitialized ? 'INICIALIZADO' : 'NO INICIALIZADO'}',
+    return sendWithRetry(
+      contacts: contacts,
+      operationName: 'mensaje de texto',
+      maxRetries: maxRetries,
+      sendFunction:
+          (contact) => sendMessage(contact.chatId, text, markdown: markdown),
     );
-    print('⚠️ Token enmascarado: ${_maskToken(_token)}');
-
-    // Mostrar primeros caracteres del mensaje
-    print(
-      '⚠️ Mensaje a enviar (primeros 50 caracteres): ${text.length > 50 ? text.substring(0, 50) + '...' : text}',
-    );
-
-    // Enviar a cada contacto secuencialmente
-    int contactIndex = 0;
-    for (final contact in contacts) {
-      contactIndex++;
-      print(
-        '⚠️ Procesando contacto $contactIndex/${contacts.length}: ${contact.name} (${contact.chatId})',
-      );
-
-      try {
-        print(
-          '⚠️ Intentando enviar mensaje a ${contact.name} (${contact.chatId})',
-        );
-        final success = await sendMessage(
-          contact.chatId,
-          text,
-          markdown: markdown,
-        );
-
-        if (success) {
-          print('⚠️ Mensaje enviado exitosamente a ${contact.name}');
-        } else {
-          print(
-            '⚠️ Fallo al enviar mensaje a ${contact.name} (${contact.chatId})',
-          );
-          allSuccess = false;
-        }
-
-        // Pequeña pausa entre mensajes para no saturar la API
-        print('⚠️ Esperando 500ms antes del siguiente envío');
-        await Future.delayed(const Duration(milliseconds: 500));
-      } catch (e) {
-        print('⚠️ ERROR CRÍTICO al enviar mensaje a ${contact.name}: $e');
-        _logger.e('Error al enviar mensaje a ${contact.name}: $e');
-        allSuccess = false;
-      }
-    }
-
-    print(
-      '⚠️ FIN sendMessageToAllContacts: ${allSuccess ? 'TODOS ENVIADOS' : 'ALGUNOS FALLARON'}',
-    );
-    return allSuccess;
   }
 
-  // Enviar ubicación a todos los contactos de emergencia
+  // Enviar ubicación a todos los contactos con reintentos
   Future<bool> sendLocationToAllContacts(
     List<EmergencyContact> contacts,
-    Position position,
-  ) async {
-    if (contacts.isEmpty) {
-      print('ADVERTENCIA: Lista de contactos vacía');
-      _logger.w('Lista de contactos vacía al enviar ubicación');
-      return false;
-    }
-
-    print('Enviando ubicación a ${contacts.length} contactos');
-    bool allSuccess = true;
-
-    // Enviar a cada contacto secuencialmente
-    for (final contact in contacts) {
-      try {
-        final success = await sendLocation(contact.chatId, position);
-        if (!success) {
-          print(
-            'Fallo al enviar ubicación a ${contact.name} (${contact.chatId})',
-          );
-          allSuccess = false;
-        }
-        // Pequeña pausa entre mensajes para no saturar la API
-        await Future.delayed(const Duration(milliseconds: 500));
-      } catch (e) {
-        print('Error al enviar ubicación a ${contact.name}: $e');
-        allSuccess = false;
-      }
-    }
-
-    return allSuccess;
+    Position position, {
+    int maxRetries = 3,
+  }) async {
+    return sendWithRetry(
+      contacts: contacts,
+      operationName: 'ubicación',
+      maxRetries: maxRetries,
+      sendFunction: (contact) => sendLocation(contact.chatId, position),
+    );
   }
 
-  // Enviar audio a todos los contactos de emergencia
+  // Enviar archivo de audio a todos los contactos con reintentos
   Future<bool> sendAudioToAllContacts(
     List<EmergencyContact> contacts,
-    String filePath,
-  ) async {
-    if (contacts.isEmpty) {
-      print('ADVERTENCIA: Lista de contactos vacía');
-      _logger.w('Lista de contactos vacía al enviar audio');
-      return false;
-    }
-
-    print('Enviando audio a ${contacts.length} contactos');
-    bool allSuccess = true;
-
-    // Enviar a cada contacto secuencialmente
-    for (final contact in contacts) {
-      try {
-        final success = await sendAudio(contact.chatId, filePath);
-        if (!success) {
-          print('Fallo al enviar audio a ${contact.name} (${contact.chatId})');
-          allSuccess = false;
-        }
-        // Pequeña pausa entre mensajes para no saturar la API
-        await Future.delayed(const Duration(milliseconds: 1000));
-      } catch (e) {
-        print('Error al enviar audio a ${contact.name}: $e');
-        allSuccess = false;
-      }
-    }
-
-    return allSuccess;
+    String audioPath, {
+    int maxRetries = 3,
+  }) async {
+    return sendWithRetry(
+      contacts: contacts,
+      operationName: 'archivo de audio',
+      maxRetries: maxRetries,
+      sendFunction: (contact) => sendAudio(contact.chatId, audioPath),
+    );
   }
 
   // Verificar si el token es válido

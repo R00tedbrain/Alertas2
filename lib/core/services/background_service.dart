@@ -5,6 +5,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/widgets.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:flutter_background_service_ios/flutter_background_service_ios.dart';
@@ -20,6 +21,24 @@ import '../services/config_service.dart';
 import '../../data/models/app_config.dart';
 import '../../data/models/emergency_contact.dart';
 
+// Método para imprimir logs solo en modo debug - accesible en todo el archivo
+void _log(String message) {
+  if (kDebugMode) {
+    print(message);
+  }
+}
+
+// Método auxiliar para completar tareas BGTask
+Future<void> _completeBGTask(MethodChannel channel) async {
+  _log('▶️ Finalizando tarea en segundo plano');
+  try {
+    // Usar siempre el mismo nombre de método para la comunicación con iOS
+    await channel.invokeMethod('completeBackgroundTask');
+  } catch (e) {
+    _log('⚠️ No se pudo notificar finalización: $e');
+  }
+}
+
 // Anotación crucial para que la clase sea accesible desde código nativo
 @pragma('vm:entry-point')
 class BackgroundAlertService {
@@ -30,6 +49,9 @@ class BackgroundAlertService {
 
   // Estado
   bool _isAlertActive = false;
+
+  // Getter público para _isAlertActive
+  bool get isAlertActive => _isAlertActive;
 
   // Servicio en segundo plano
   late FlutterBackgroundService _backgroundService;
@@ -44,9 +66,15 @@ class BackgroundAlertService {
   final FlutterLocalNotificationsPlugin _notifications =
       FlutterLocalNotificationsPlugin();
 
-  // Timers
-  Timer? _locationTimer;
-  Timer? _audioTimer;
+  // Lista centralizada de timers para facilitar la limpieza
+  static final List<Timer> _timers = [];
+
+  // Variables para mantener los suscriptores activos y facilitar su limpieza
+  final List<StreamSubscription> _activeSubscriptions = [];
+
+  // Stream para recibir actualizaciones de estado del servicio
+  Stream<Map<String, dynamic>?> get onServiceUpdate =>
+      _backgroundService.on('updateStatus');
 
   // Singleton
   static final BackgroundAlertService _instance =
@@ -103,7 +131,7 @@ class BackgroundAlertService {
     );
 
     // PASO 1: Iniciar el servicio después de configurarlo
-    print('Iniciando servicio en segundo plano');
+    _log('Iniciando servicio en segundo plano');
     await _backgroundService.startService();
 
     // Registrar las identificaciones de tarea en iOS
@@ -111,7 +139,7 @@ class BackgroundAlertService {
       await _registerBackgroundTasks();
 
       // PASO 2: Programar las tareas BGTask para iOS
-      print('Programando tareas BGTask para iOS');
+      _log('Programando tareas BGTask para iOS');
       try {
         // Primero inicializar ConfigService para obtener configuración
         final configService = ConfigService();
@@ -121,9 +149,9 @@ class BackgroundAlertService {
         // Usar el canal para programar tareas
         await _scheduleBGTasksManually();
 
-        print('Tareas programadas manualmente desde Flutter');
+        _log('Tareas programadas manualmente desde Flutter');
       } catch (e) {
-        print('Error al programar tareas BGTask: $e');
+        _log('Error al programar tareas BGTask: $e');
       }
     }
   }
@@ -147,22 +175,20 @@ class BackgroundAlertService {
         },
       });
 
-      print(
-        '✅ Tareas en segundo plano programadas correctamente desde Flutter',
-      );
+      _log('✅ Tareas en segundo plano programadas correctamente desde Flutter');
     } catch (e) {
-      print('❌ Error al programar tareas BGTask manualmente: $e');
+      _log('❌ Error al programar tareas BGTask manualmente: $e');
     }
   }
 
   // Añadir una nueva función para registrar las tareas de fondo en iOS
   Future<bool> _registerBackgroundTasks() async {
-    print('🐛 Registrando tareas en segundo plano para iOS');
+    _log('🐛 Registrando tareas en segundo plano para iOS');
 
     if (Platform.isIOS) {
       try {
         // Para iOS, manejar el registro a través del canal nativo
-        print('🐛 Invocando registerBackgroundTasks en canal nativo');
+        _log('🐛 Invocando registerBackgroundTasks en canal nativo');
         final result = await _backgroundChannel.invokeMethod(
           'registerBackgroundTasks',
           {
@@ -173,18 +199,18 @@ class BackgroundAlertService {
             ],
           },
         );
-        print('💡 Tareas en segundo plano registradas con resultado: $result');
+        _log('💡 Tareas en segundo plano registradas con resultado: $result');
 
         // Configurar manejo adicional de tareas
-        print('🐛 Configurando tareas en segundo plano adicionales');
+        _log('🐛 Configurando tareas en segundo plano adicionales');
         final additionalResult = await _backgroundChannel.invokeMethod(
           'setupBackgroundTasks',
         );
-        print('💡 Configuración adicional completada: $additionalResult');
+        _log('💡 Configuración adicional completada: $additionalResult');
 
         return result == true;
       } catch (e) {
-        print('Error al registrar tareas en segundo plano para iOS: $e');
+        _log('Error al registrar tareas en segundo plano para iOS: $e');
         return false;
       }
     }
@@ -201,7 +227,7 @@ class BackgroundAlertService {
 
     // Configurar manejadores para métodos invocados desde nativo
     _backgroundChannel.setMethodCallHandler((call) async {
-      print('Método invocado desde nativo: ${call.method}');
+      _log('Método invocado desde nativo: ${call.method}');
 
       switch (call.method) {
         case 'updateStatus':
@@ -211,24 +237,24 @@ class BackgroundAlertService {
           final bool isActive = args['isActive'];
           final int timestamp = args['timestamp'];
 
-          print(
+          _log(
             'Estado actualizado: $status, Activo: $isActive, Timestamp: $timestamp',
           );
           return true;
 
         case 'startBackgroundFetch':
           // Manejar la solicitud de ejecución en segundo plano desde iOS
-          print('⚠️ Recibido startBackgroundFetch desde iOS');
+          _log('⚠️ Recibido startBackgroundFetch desde iOS');
           final Map<String, dynamic> args = call.arguments;
           final String taskId = args['taskId'];
 
-          print('⚠️ Tarea en segundo plano solicitada: $taskId');
+          _log('⚠️ Tarea en segundo plano solicitada: $taskId');
 
           try {
             // Cargar configuración
             final configService = await _getConfigService();
             if (configService == null) {
-              print('❌ ERROR: No se pudo obtener ConfigService');
+              _log('❌ ERROR: No se pudo obtener ConfigService');
               return false;
             }
 
@@ -236,7 +262,7 @@ class BackgroundAlertService {
             final contacts = configService.emergencyContacts;
 
             if (token.isEmpty || contacts.isEmpty) {
-              print(
+              _log(
                 '❌ ERROR: Configuración incompleta para la alerta en segundo plano',
               );
               return false;
@@ -248,14 +274,14 @@ class BackgroundAlertService {
 
             // Obtener ubicación
             final locationService = LocationService();
-            print('⏳ Obteniendo ubicación para envío en segundo plano...');
+            _log('⏳ Obteniendo ubicación para envío en segundo plano...');
             final position = await locationService.getCurrentLocation();
 
             if (position == null) {
-              print('❌ ERROR: No se pudo obtener ubicación');
+              _log('❌ ERROR: No se pudo obtener ubicación');
 
               // Intentar enviar mensaje sin ubicación
-              print(
+              _log(
                 '⏳ INICIANDO ENVÍO DE MENSAJE SIN UBICACIÓN a Telegram (BGTask)',
               );
               try {
@@ -264,17 +290,17 @@ class BackgroundAlertService {
                   '🚨 ALERTA AUTOMÁTICA: Actualización periódica (sin ubicación disponible)',
                   markdown: false,
                 );
-                print(
+                _log(
                   '✅ Mensaje enviado exitosamente desde tarea en segundo plano (sin ubicación)',
                 );
                 return true;
               } catch (e) {
-                print('❌ ERROR al enviar mensaje desde BGTask: $e');
+                _log('❌ ERROR al enviar mensaje desde BGTask: $e');
                 return false;
               }
             } else {
               // Enviar mensaje con ubicación
-              print(
+              _log(
                 '⏳ INICIANDO ENVÍO DE MENSAJE CON UBICACIÓN a Telegram (BGTask)',
               );
               try {
@@ -284,17 +310,17 @@ class BackgroundAlertService {
                   '🚨 ALERTA AUTOMÁTICA: Ubicación actualizada',
                   markdown: false,
                 );
-                print('✅ Mensaje enviado exitosamente desde BGTask');
+                _log('✅ Mensaje enviado exitosamente desde BGTask');
 
                 // Luego intentar enviar ubicación
                 await telegramService.sendLocationToAllContacts(
                   contacts,
                   position,
                 );
-                print('✅ Ubicación enviada exitosamente desde BGTask');
+                _log('✅ Ubicación enviada exitosamente desde BGTask');
                 return true;
               } catch (e) {
-                print('❌ ERROR al enviar actualizaciones desde BGTask: $e');
+                _log('❌ ERROR al enviar actualizaciones desde BGTask: $e');
 
                 // Intentar con formato alternativo
                 try {
@@ -308,18 +334,18 @@ class BackgroundAlertService {
                     '🚨 ALERTA: Mi ubicación actual: $locationText\n\nVer en mapa: $mapsLink',
                     markdown: false,
                   );
-                  print(
+                  _log(
                     '✅ Texto de ubicación enviado como alternativa desde BGTask',
                   );
                   return true;
                 } catch (retryError) {
-                  print('❌ ERROR en segundo intento desde BGTask: $retryError');
+                  _log('❌ ERROR en segundo intento desde BGTask: $retryError');
                   return false;
                 }
               }
             }
           } catch (e) {
-            print('❌ ERROR CRÍTICO en BGTask: $e');
+            _log('❌ ERROR CRÍTICO en BGTask: $e');
             return false;
           }
 
@@ -339,7 +365,7 @@ class BackgroundAlertService {
       await configService.initialize();
       return configService;
     } catch (e) {
-      print('Error al inicializar ConfigService: $e');
+      _log('Error al inicializar ConfigService: $e');
       return null;
     }
   }
@@ -349,56 +375,44 @@ class BackgroundAlertService {
   static Future<bool> _onIosBackground(ServiceInstance service) async {
     WidgetsFlutterBinding.ensureInitialized();
     DartPluginRegistrant.ensureInitialized();
-    print('iOS background handler iniciado');
+    _log('iOS background handler iniciado');
 
-    // Configuración más robusta para evitar BGTaskSchedulerErrorDomain
+    // Configuración más eficiente para evitar BGTaskSchedulerErrorDomain
     try {
       if (Platform.isIOS) {
-        print('Inicializando manejo de segundo plano iOS mejorado');
+        _log('Inicializando manejo de segundo plano iOS mejorado');
 
-        // Intentar notificar correctamente sobre la finalización de la tarea
+        // Notificar inmediatamente que la tarea se ha completado
         try {
-          // Crear el canal solo si es necesario
           const MethodChannel channel = MethodChannel(
             'com.alerta.telegram/background_tasks',
           );
 
-          // Notificar que estamos procesando en segundo plano
+          // Notificar que hemos completado la tarea BGTask
           await channel.invokeMethod('completeBackgroundTask', {
             'taskIdentifier': 'com.alerta.telegram.processing',
             'timestamp': DateTime.now().millisecondsSinceEpoch,
           });
-          print('Notificación de tarea en proceso enviada correctamente');
+          _log('Tarea en segundo plano completada correctamente');
         } catch (e) {
-          print('Error al comunicar estado de tarea: $e');
+          _log('Error al comunicar finalización de tarea: $e');
         }
 
-        // Método para mantener la tarea activa mediante invocación periódica
-        print('Configurando timers para mantener vivo el servicio en iOS');
-        Timer.periodic(const Duration(minutes: 1), (timer) {
-          print('KeepAlive timer para iOS: ${DateTime.now()}');
-          try {
-            service.invoke('setBackgroundProcessingTaskCompleted', {
-              'timestamp': DateTime.now().millisecondsSinceEpoch,
-            });
-            print('Señal de KeepAlive enviada');
-          } catch (e) {
-            print('Error en KeepAlive: $e');
-          }
-        });
-
-        // Reenviar periódicamente señales de vida
-        Timer.periodic(const Duration(minutes: 5), (timer) {
-          print('iOS background service estado: activo - ${DateTime.now()}');
+        // Solo un timer para enviar una señal final de vida antes de salir
+        Timer(const Duration(seconds: 2), () {
           try {
             service.invoke('heartbeat', {
               'timestamp': DateTime.now().millisecondsSinceEpoch,
+              'status': 'backgroundFetch_completed',
             });
-          } catch (_) {}
+            _log('Señal final de heartbeat enviada');
+          } catch (e) {
+            _log('Error en señal final: $e');
+          }
         });
       }
     } catch (e) {
-      print('Error al configurar servicio iOS: $e');
+      _log('Error al configurar servicio iOS: $e');
     }
 
     return true;
@@ -410,13 +424,13 @@ class BackgroundAlertService {
     WidgetsFlutterBinding.ensureInitialized();
     DartPluginRegistrant.ensureInitialized();
 
-    print('Servicio en segundo plano iniciado');
+    _log('Servicio en segundo plano iniciado');
 
     // Servicio para Android
     if (service is AndroidServiceInstance) {
       service.setAsForegroundService();
       service.setAutoStartOnBootMode(true);
-      print('Configurado como servicio en primer plano (Android)');
+      _log('Configurado como servicio en primer plano (Android)');
     }
 
     // Para iOS, enviar una señal inicial de que el servicio está activo
@@ -430,7 +444,7 @@ class BackgroundAlertService {
 
     // Responder a los heartbeats (principalmente para iOS)
     service.on('heartbeat').listen((event) {
-      print('Heartbeat recibido: $event');
+      _log('Heartbeat recibido: $event');
       // Responder con un estado actualizado
       service.invoke('updateStatus', {
         'status': 'Servicio activo',
@@ -440,23 +454,65 @@ class BackgroundAlertService {
       });
     });
 
-    // Escuchar mensajes
+    // ÚNICO EVENTO DE DETENCIÓN: detendrá todo el servicio al recibir 'stop'
+    service.on('stop').listen((event) async {
+      _log('Evento STOP recibido, deteniendo todo el servicio');
+      try {
+        // 1. Cancelar todos los timers activos
+        _cancelAllTimers();
+        _log('Todos los timers cancelados');
+
+        // 2. Para iOS, liberar recursos de audio
+        if (Platform.isIOS) {
+          try {
+            final audioService = AudioService();
+            _log('Liberando recursos de audio en iOS desde el evento stop');
+            await audioService.dispose();
+            _log('Recursos de audio liberados correctamente');
+          } catch (e) {
+            _log('Error al liberar recursos de audio: $e');
+          }
+        }
+
+        // 3. Notificar al UI que el servicio se está deteniendo
+        service.invoke('updateStatus', {
+          'status': 'Servicio detenido',
+          'isActive': false,
+          'timestamp': DateTime.now().millisecondsSinceEpoch,
+        });
+
+        // 4. Detener el servicio completamente
+        _log('⚠️ Llamando a stopSelf() para detener el isolate');
+        await service.stopSelf();
+      } catch (e) {
+        _log('Error al detener el servicio: $e');
+
+        // Si hay un error, intentar forzar la detención de todos modos
+        try {
+          await service.stopSelf();
+        } catch (e2) {
+          _log('Error secundario al intentar stopSelf: $e2');
+        }
+      }
+    });
+
+    // Responder a los comandos para iniciar alerta
     service.on('startAlert').listen((event) async {
-      print('Recibida petición para iniciar alerta con datos: $event');
+      _log('Recibida petición para iniciar alerta con datos: $event');
       if (event == null) {
-        print('ERROR: Evento startAlert recibido con datos nulos');
+        _log('ERROR: Evento startAlert recibido con datos nulos');
         return;
       }
 
       String? token = event['token'] as String?;
       if (token == null || token.isEmpty) {
-        print('ERROR: Token nulo o vacío');
+        _log('ERROR: Token nulo o vacío');
         return;
       }
 
       List<dynamic>? contactsRaw = event['contacts'] as List<dynamic>?;
       if (contactsRaw == null || contactsRaw.isEmpty) {
-        print('ERROR: Lista de contactos nula o vacía');
+        _log('ERROR: Lista de contactos nula o vacía');
         return;
       }
 
@@ -472,163 +528,50 @@ class BackgroundAlertService {
           ),
         );
       } catch (e) {
-        print('ERROR en _startAlert: $e');
+        _log('ERROR en _startAlert: $e');
       }
     });
 
-    service.on('stopAlert').listen((event) async {
-      print('Recibida petición para detener alerta');
-      await _stopAlert(service);
+    // Soporte para nombres antiguos - redireccionar al único evento 'stop'
+    service.on('stopAlert').listen((event) {
+      _log(
+        'Recibida petición para detener alerta via stopAlert - redirigiendo a stop',
+      );
+      service.invoke('stop', {});
+    });
+
+    service.on('stopService').listen((event) {
+      _log(
+        'Recibida petición para detener alerta via stopService - redirigiendo a stop',
+      );
+      service.invoke('stop', {});
     });
   }
 
-  // Iniciar alerta en segundo plano
+  // Función mejorada para cancelar todos los timers
+  static void _cancelAllTimers() {
+    _log('Cancelando todos los timers...');
+    while (_timers.isNotEmpty) {
+      _timers.removeLast().cancel();
+    }
+    _timers.clear();
+    _log('Todos los timers han sido cancelados');
+  }
+
+  // Método para configurar servicios en segundo plano específicos para iOS
   @pragma('vm:entry-point')
-  static Future<void> _startAlert(
+  static Future<void> _setupBackgroundServices(
     ServiceInstance service,
-    String token,
-    List<EmergencyContact> contacts,
     AlertSettings settings,
+    LocationService locationService,
   ) async {
-    final logger = Logger();
-    print('▶️ _startAlert entró - PUNTO DE ENTRADA CRÍTICO');
-    print('Iniciando alerta en segundo plano');
-    print('Token: $token');
-    print('Cantidad de contactos: ${contacts.length}');
-
-    // Información detallada sobre la lista de contactos para depuración
-    print('Contactos detallados:');
-    if (contacts.isEmpty) {
-      print('ERROR CRÍTICO: Lista de contactos está VACÍA');
-    } else {
-      for (var i = 0; i < contacts.length; i++) {
-        final contact = contacts[i];
-        print(
-          '  Contacto #$i - Nombre: ${contact.name}, Chat ID: ${contact.chatId}',
-        );
-        // Verificar que el chat ID sea válido
-        try {
-          final chatIdNum = int.parse(contact.chatId);
-          print('    Chat ID válido: $chatIdNum');
-        } catch (e) {
-          print(
-            '    ERROR: Chat ID inválido, no es un número: ${contact.chatId}',
-          );
-        }
-      }
-    }
-
-    print('Configuración: ${settings.toJson()}');
-
-    final locationService = LocationService();
-    final audioService = AudioService();
-    final telegramService = TelegramService();
-
-    // Inicializar servicios
-    print('Inicializando servicio de Telegram');
-    telegramService.initialize(token);
-
-    // En iOS, primero inicializar el servicio de telegram antes que el audio
-    // para evitar problemas de inicialización
-    if (Platform.isIOS) {
-      print('Verificando token de Telegram antes de inicializar audio en iOS');
-      try {
-        await telegramService.verifyToken();
-        await Future.delayed(const Duration(milliseconds: 500));
-      } catch (e) {
-        print('Error al verificar token de Telegram: $e');
-      }
-
-      // La configuración de audio session ahora se maneja a través del paquete audio_session
-      // directamente en el servicio AudioService, por lo que eliminamos la configuración redundante
-      print(
-        'La configuración de audio session se manejará a través de audio_session',
-      );
-    }
-
-    // Ahora inicializar el audio después del telegram en iOS
-    print('Inicializando servicio de Audio');
-    try {
-      // En iOS, damos más tiempo entre la verificación del token y la inicialización de audio
-      if (Platform.isIOS) {
-        // Este retraso adicional puede evitar conflictos entre sesiones de audio
-        await Future.delayed(const Duration(milliseconds: 1200));
-        print(
-          'Verificando permiso de micrófono explícitamente antes de inicializar audio en iOS',
-        );
-
-        // Verificación explícita de permisos
-        final micStatus = await Permission.microphone.status;
-        print('Estado actual del permiso de micrófono en iOS: $micStatus');
-
-        if (micStatus != PermissionStatus.granted) {
-          print('Solicitando permiso de micrófono en iOS explícitamente');
-          final newStatus = await Permission.microphone.request();
-          print('Nuevo estado del permiso de micrófono: $newStatus');
-
-          if (newStatus != PermissionStatus.granted) {
-            print(
-              'ADVERTENCIA: No se pudo obtener permiso de micrófono en iOS',
-            );
-          }
-        }
-      }
-
-      await audioService.initialize();
-      print('Servicio de audio inicializado correctamente');
-    } catch (e) {
-      print('Error al inicializar audio: $e');
-      // En iOS, hacer un segundo intento con nueva instancia
-      if (Platform.isIOS) {
-        try {
-          print('Reintentando inicialización de audio para iOS');
-
-          // Liberar recursos completamente antes de reintentar
-          try {
-            await audioService.dispose();
-            await Future.delayed(const Duration(seconds: 3));
-          } catch (disposeError) {
-            print('Error al liberar recursos de audio: $disposeError');
-            // Continuamos de todos modos
-          }
-
-          print('Esperando 3 segundos adicionales antes de reintentar en iOS');
-          await Future.delayed(const Duration(seconds: 3));
-          await audioService.initialize();
-          print('Audio inicializado en segundo intento');
-        } catch (retryError) {
-          print(
-            'Fallo en segundo intento de inicialización de audio: $retryError',
-          );
-
-          // Tercer intento con enfoque diferente
-          try {
-            print('Último intento de inicialización de audio para iOS');
-            await Future.delayed(const Duration(seconds: 4));
-
-            // Para el último intento, simplemente usar la instancia existente
-            print('Usando instancia existente con inicialización limpia');
-            await audioService.dispose();
-            await Future.delayed(const Duration(seconds: 1));
-            await audioService.initialize();
-            print('Audio inicializado en tercer intento');
-          } catch (finalError) {
-            print(
-              'Todos los intentos de inicialización de audio fallaron: $finalError',
-            );
-            // Continuamos sin audio en último caso
-          }
-        }
-      }
-    }
-
     // Manejo específico para iOS y errores BGTaskSchedulerErrorDomain
     if (Platform.isIOS) {
-      print('Configurando tareas en segundo plano para iOS...');
+      _log('Configurando tareas en segundo plano para iOS...');
       try {
         // En iOS, debemos asegurarnos que los permisos estén correctamente configurados
         // para evitar errores BGTaskSchedulerErrorDomain
-        print('Verificando permisos para tareas en segundo plano en iOS');
+        _log('Verificando permisos para tareas en segundo plano en iOS');
 
         // Configurar background tasks manualmente para iOS
         const MethodChannel taskChannel = MethodChannel(
@@ -644,82 +587,651 @@ class BackgroundAlertService {
           'setupBackgroundTasks',
           taskInfo,
         );
-        print('Tareas en segundo plano registradas correctamente: $result');
+        _log('Tareas en segundo plano registradas correctamente: $result');
 
         // Verificar y solicitar permisos de ubicación
         final permission = await Geolocator.checkPermission();
-        print('Estado actual del permiso de ubicación: $permission');
+        _log('Estado actual del permiso de ubicación: $permission');
 
         if (permission != LocationPermission.always) {
-          print(
-            'ADVERTENCIA: La ubicación en segundo plano no está habilitada',
-          );
-          print('Algunas funciones podrían no funcionar correctamente');
+          _log('ADVERTENCIA: La ubicación en segundo plano no está habilitada');
+          _log('Algunas funciones podrían no funcionar correctamente');
 
           // Intentar solicitar permisos si es posible
           if (permission == LocationPermission.whileInUse) {
-            print('Intentando solicitar permiso de ubicación always...');
+            _log('Intentando solicitar permiso de ubicación always...');
             final newPermission = await Geolocator.requestPermission();
-            print('Nuevo estado de permiso: $newPermission');
+            _log('Nuevo estado de permiso: $newPermission');
           }
         }
 
         // Para iOS, aumentar intervalo entre grabaciones para permitir
         // que la app tenga más tiempo entre tareas
         if (settings.audioRecordingIntervalSeconds < 60) {
-          print('Ajustando intervalo de grabación para iOS');
+          _log('Ajustando intervalo de grabación para iOS');
           settings = settings.copyWith(
             audioRecordingIntervalSeconds: math.max(
               settings.audioRecordingIntervalSeconds,
               60,
             ),
           );
-          print(
+          _log(
             'Nuevo intervalo de grabación: ${settings.audioRecordingIntervalSeconds}s',
           );
         }
 
         // Para iOS, configurar temporizadores de keepAlive más frecuentes
-        print('Configurando servicio para mantenerlo activo en iOS');
-        Timer.periodic(const Duration(minutes: 1), (timer) {
-          print('KeepAlive timer principal para iOS: ${DateTime.now()}');
+        _log('Configurando servicio para mantenerlo activo en iOS');
+        _timers.add(
+          Timer.periodic(const Duration(minutes: 1), (timer) {
+            _log('KeepAlive timer principal para iOS: ${DateTime.now()}');
 
-          // Mantener la tarea activa
-          try {
-            // Usar directamente service.invoke sin comprobar tipo
-            service.invoke('keepAlive', {
-              'timestamp': DateTime.now().millisecondsSinceEpoch,
-            });
-            print('KeepAlive invocado para iOS');
-          } catch (e) {
-            print('Error en KeepAlive: $e');
-          }
-        });
+            // Mantener la tarea activa
+            try {
+              // Usar directamente service.invoke sin comprobar tipo
+              service.invoke('keepAlive', {
+                'timestamp': DateTime.now().millisecondsSinceEpoch,
+              });
+              _log('KeepAlive invocado para iOS');
+            } catch (e) {
+              _log('Error en KeepAlive: $e');
+            }
+          }),
+        );
 
         // Temporizador dedicado a mantener activos los permisos de ubicación
-        Timer.periodic(const Duration(minutes: 2), (timer) async {
-          print('Verificando permisos de ubicación en iOS: ${DateTime.now()}');
-          try {
-            final position = await locationService.getCurrentLocation();
-            if (position != null) {
-              print(
-                'Posición de keepAlive: ${position.latitude}, ${position.longitude}',
-              );
+        _timers.add(
+          Timer.periodic(const Duration(minutes: 2), (timer) async {
+            _log('Verificando permisos de ubicación en iOS: ${DateTime.now()}');
+            try {
+              final position = await locationService.getCurrentLocation();
+              if (position != null) {
+                _log(
+                  'Posición de keepAlive: ${position.latitude}, ${position.longitude}',
+                );
+              }
+            } catch (e) {
+              _log('Error en verificación periódica de ubicación: $e');
             }
-          } catch (e) {
-            print('Error en verificación periódica de ubicación: $e');
-          }
-        });
-
-        // Para Android, configurar como servicio en primer plano
-        if (service is AndroidServiceInstance) {
-          service.setAsForegroundService();
-        }
+          }),
+        );
       } catch (e) {
-        print('Error al configurar tareas en segundo plano para iOS: $e');
+        _log('Error al configurar tareas en segundo plano para iOS: $e');
         // Continuamos de todos modos
       }
     }
+  }
+
+  // Método para enviar el mensaje inicial con ubicación
+  @pragma('vm:entry-point')
+  static Future<bool> _sendInitialMessage(
+    TelegramService telegramService,
+    LocationService locationService,
+    List<EmergencyContact> contacts,
+  ) async {
+    _log('⏳ Obteniendo ubicación actual para enviar mensaje inicial...');
+    int locationRetries = 0;
+    Position? position;
+
+    // Intentar obtener ubicación con reintentos
+    while (position == null && locationRetries < 3) {
+      try {
+        position = await locationService.getCurrentLocation();
+        if (position == null) {
+          locationRetries++;
+          _log('Reintento ${locationRetries}/3 para obtener ubicación');
+          await Future.delayed(Duration(seconds: 1));
+        }
+      } catch (e) {
+        _log('Error al obtener ubicación (intento ${locationRetries + 1}): $e');
+        locationRetries++;
+        await Future.delayed(Duration(seconds: 1));
+      }
+    }
+
+    if (position != null) {
+      _log(
+        '✅ Ubicación obtenida: Lat ${position.latitude}, Lng ${position.longitude}',
+      );
+
+      // Enviar mensaje de inicio
+      _log('⏳ Enviando mensaje inicial a ${contacts.length} contactos');
+      bool messageSent = false;
+      int messageRetries = 0;
+
+      while (!messageSent && messageRetries < 3) {
+        try {
+          _log(
+            '⏳ INICIANDO ENVÍO DE MENSAJE CRÍTICO a Telegram - intento ${messageRetries + 1}',
+          );
+          await telegramService.sendMessageToAllContacts(
+            contacts,
+            '🚨 *ALERTA DE EMERGENCIA* 🚨\n\nSe ha activado una alerta. Se enviarán actualizaciones periódicas.',
+            markdown: true,
+          );
+          messageSent = true;
+          _log('✅ Mensaje inicial enviado correctamente');
+        } catch (e) {
+          _log(
+            '❌ ERROR al enviar mensaje inicial (intento ${messageRetries + 1}): $e',
+          );
+
+          // Intentar nuevamente con un mensaje más simple
+          try {
+            _log(
+              '⏳ Reintentando con mensaje simple - intento ${messageRetries + 1}',
+            );
+            await telegramService.sendMessageToAllContacts(
+              contacts,
+              'ALERTA DE EMERGENCIA: Se ha activado una alerta.',
+              markdown: false,
+            );
+            messageSent = true;
+            _log('✅ Mensaje simple enviado correctamente');
+          } catch (retryError) {
+            _log('❌ ERROR en segundo intento de mensaje inicial: $retryError');
+          }
+
+          messageRetries++;
+          if (!messageSent && messageRetries < 3) {
+            await Future.delayed(Duration(seconds: 2));
+          }
+        }
+      }
+
+      // Enviar ubicación inicial
+      _log('⏳ INICIANDO ENVÍO DE UBICACIÓN a Telegram');
+      bool locationSent = false;
+      int locationSendRetries = 0;
+
+      while (!locationSent && locationSendRetries < 3) {
+        try {
+          await telegramService.sendLocationToAllContacts(contacts, position);
+          locationSent = true;
+          _log('✅ Ubicación inicial enviada correctamente');
+        } catch (e) {
+          _log(
+            '❌ ERROR al enviar ubicación inicial (intento ${locationSendRetries + 1}): $e',
+          );
+
+          // Intentar con un mensaje que incluya la ubicación en texto
+          try {
+            _log('⏳ Reintentando con mensaje de texto de ubicación');
+            final locationText = locationService.formatLocationMessage(
+              position,
+            );
+            final mapsLink = locationService.getGoogleMapsLink(position);
+            await telegramService.sendMessageToAllContacts(
+              contacts,
+              'Mi ubicación actual:\n$locationText\n\nVer en mapa: $mapsLink',
+              markdown: false,
+            );
+            locationSent = true;
+            _log('✅ Texto de ubicación enviado como alternativa');
+          } catch (retryError) {
+            _log(
+              '❌ ERROR en segundo intento de envío de ubicación: $retryError',
+            );
+          }
+
+          locationSendRetries++;
+          if (!locationSent && locationSendRetries < 3) {
+            await Future.delayed(Duration(seconds: 2));
+          }
+        }
+      }
+
+      return messageSent || locationSent;
+    } else {
+      _log('❌ ERROR: No se pudo obtener la posición inicial');
+
+      // Intentar enviar un mensaje a pesar de no tener ubicación
+      try {
+        _log('⏳ INICIANDO ENVÍO DE MENSAJE SIN UBICACIÓN a Telegram');
+        await telegramService.sendMessageToAllContacts(
+          contacts,
+          '🚨 *ALERTA DE EMERGENCIA* 🚨\n\nSe ha activado una alerta. No se pudo obtener la ubicación actual.',
+          markdown: true,
+        );
+        _log('✅ Mensaje de alerta sin ubicación enviado');
+        return true;
+      } catch (e) {
+        _log('❌ ERROR al enviar mensaje de alerta sin ubicación: $e');
+        return false;
+      }
+    }
+  }
+
+  // Método para programar actualizaciones periódicas de ubicación
+  @pragma('vm:entry-point')
+  static void _scheduleLocationUpdates(
+    ServiceInstance service,
+    TelegramService telegramService,
+    LocationService locationService,
+    List<EmergencyContact> contacts,
+    AlertSettings settings,
+  ) {
+    _log(
+      '⏳ Configurando timer para ubicación cada ${settings.locationUpdateIntervalSeconds} segundos',
+    );
+
+    _timers.add(
+      Timer.periodic(Duration(seconds: settings.locationUpdateIntervalSeconds), (
+        timer,
+      ) async {
+        try {
+          _log('⏳ Timer de ubicación activado, obteniendo nueva posición');
+          final newPosition = await locationService.getCurrentLocation();
+          if (newPosition != null) {
+            _log(
+              '✅ Nueva posición obtenida: Lat ${newPosition.latitude}, Lng ${newPosition.longitude}',
+            );
+
+            // Enviar actualización como mensaje para mayor confiabilidad
+            try {
+              _log('⏳ INICIANDO ENVÍO DE MENSAJE DE ACTUALIZACIÓN a Telegram');
+              final locationText = locationService.formatLocationMessage(
+                newPosition,
+              );
+              final mapsLink = locationService.getGoogleMapsLink(newPosition);
+              await telegramService.sendMessageToAllContacts(
+                contacts,
+                '📍 *Actualización de ubicación*\n\n$locationText\n\nVer en mapa: $mapsLink',
+                markdown: true,
+              );
+              _log('✅ Mensaje de ubicación enviado correctamente');
+            } catch (e) {
+              _log('❌ Error al enviar mensaje de ubicación: $e');
+
+              // Intento con formato simple
+              try {
+                _log('⏳ Reintentando con formato simple');
+                await telegramService.sendMessageToAllContacts(
+                  contacts,
+                  'Actualización de ubicación: ${newPosition.latitude}, ${newPosition.longitude}',
+                  markdown: false,
+                );
+                _log('✅ Mensaje simple de ubicación enviado');
+              } catch (retryError) {
+                _log(
+                  '❌ No se pudo enviar ningún mensaje de ubicación: $retryError',
+                );
+              }
+            }
+
+            // También intentar enviar como ubicación nativa
+            try {
+              _log('⏳ INICIANDO ENVÍO DE UBICACIÓN NATIVA a Telegram');
+              await telegramService.sendLocationToAllContacts(
+                contacts,
+                newPosition,
+              );
+              _log('✅ Ubicación nativa enviada correctamente');
+            } catch (e) {
+              _log('❌ Error al enviar ubicación nativa: $e');
+            }
+          } else {
+            _log('❌ No se pudo obtener la nueva posición');
+          }
+        } catch (e) {
+          _log('❌ Error al enviar ubicación periódica: $e');
+          service.invoke('logError', {
+            'source': 'locationTimer',
+            'error': e.toString(),
+            'timestamp': DateTime.now().millisecondsSinceEpoch,
+          });
+        }
+      }),
+    );
+
+    _log('✅ Timer de ubicación configurado');
+  }
+
+  // Método para programar grabaciones periódicas de audio
+  @pragma('vm:entry-point')
+  static void _scheduleAudioRecordings(
+    ServiceInstance service,
+    TelegramService telegramService,
+    AudioService audioService,
+    List<EmergencyContact> contacts,
+    AlertSettings settings,
+  ) {
+    _log(
+      '⏳ Configurando timer de audio cada ${settings.audioRecordingIntervalSeconds} segundos',
+    );
+
+    _timers.add(
+      Timer.periodic(Duration(seconds: settings.audioRecordingIntervalSeconds), (
+        timer,
+      ) async {
+        try {
+          _log('⏳ Timer de audio activado, iniciando grabación');
+
+          // Para iOS, manejar la sesión de audio con más cuidado
+          bool canRecordAudio = true;
+
+          if (Platform.isIOS) {
+            try {
+              // Reinicializar el servicio de audio antes de cada grabación en iOS
+              // Esto es crítico para solucionar el problema
+              _log('Preparando servicio de audio para iOS antes de grabar');
+
+              // Liberar recursos del grabador anterior pero no desactivar la sesión
+              // Es importante evitar crear/destruir sesiones de audio repetidamente en iOS
+              try {
+                // Dar tiempo al sistema para liberar recursos anteriores
+                await Future.delayed(const Duration(milliseconds: 800));
+
+                // Inicializar nuevamente
+                await audioService.initialize();
+                _log('Servicio de audio preparado para iOS');
+              } catch (initError) {
+                _log('Error al preparar audio: $initError');
+
+                // Si hubo un error específico con la sesión, intentar una reinicialización completa
+                if (initError.toString().contains('Session')) {
+                  try {
+                    await Future.delayed(const Duration(seconds: 2));
+                    await audioService.dispose();
+                    await Future.delayed(const Duration(seconds: 2));
+                    await audioService.initialize();
+                    _log('Audio reinicializado completamente');
+                  } catch (finalError) {
+                    _log('Fallo en reinicialización completa: $finalError');
+                    canRecordAudio = false;
+                  }
+                } else {
+                  canRecordAudio = false;
+                }
+              }
+            } catch (e) {
+              _log('Error general al preparar audio en iOS: $e');
+              canRecordAudio = false;
+            }
+          }
+
+          if (!canRecordAudio) {
+            _log('No se puede grabar audio en este momento');
+
+            // Informar del error a los contactos
+            try {
+              await telegramService.sendMessageToAllContacts(
+                contacts,
+                'No se puede grabar audio en este momento. Se intentará en la próxima actualización.',
+                markdown: false,
+              );
+            } catch (msgError) {
+              _log('Error al enviar mensaje de fallo de audio: $msgError');
+            }
+
+            return;
+          }
+
+          // Grabar audio con la duración ajustada para iOS
+          final recordingDuration =
+              (Platform.isIOS)
+                  ? math.min(
+                    settings.audioRecordingDurationSeconds,
+                    20,
+                  ) // máximo 20 segundos en iOS
+                  : settings.audioRecordingDurationSeconds;
+
+          // Grabar audio
+          int audioAttempts = 0;
+          String? audioPath;
+
+          while (audioPath == null && audioAttempts < 3) {
+            audioAttempts++;
+            try {
+              _log('Intento $audioAttempts de grabación de audio');
+              _log('Grabando audio durante $recordingDuration segundos');
+              audioPath = await audioService.startRecording(recordingDuration);
+
+              if (audioPath == null && audioAttempts < 3) {
+                _log('Reintento $audioAttempts de grabación de audio');
+                await Future.delayed(const Duration(seconds: 2));
+              }
+            } catch (e) {
+              _log('Error en intento $audioAttempts de grabación: $e');
+              if (audioAttempts < 3) {
+                await Future.delayed(const Duration(seconds: 2));
+              }
+            }
+          }
+
+          if (audioPath != null) {
+            _log('Audio grabado en: $audioPath');
+
+            // Primero enviar mensaje informando que se enviará audio
+            try {
+              await telegramService.sendMessageToAllContacts(
+                contacts,
+                '🎤 Enviando grabación de audio ambiental...',
+                markdown: false,
+              );
+              _log('Mensaje previo al audio enviado');
+            } catch (e) {
+              _log('Error al enviar mensaje previo al audio: $e');
+            }
+
+            // Enviar audio a todos los contactos con sistema de reintentos mejorado
+            int audioRetries = 0;
+            bool audioSent = false;
+
+            // Para iOS, esperar un poco antes de intentar enviar el audio
+            if (Platform.isIOS) {
+              await Future.delayed(const Duration(seconds: 1));
+            }
+
+            while (!audioSent && audioRetries < 5) {
+              try {
+                audioRetries++;
+                _log('Intento $audioRetries de enviar audio');
+
+                await telegramService.sendAudioToAllContacts(
+                  contacts,
+                  audioPath,
+                );
+                audioSent = true;
+                _log('Audio enviado correctamente');
+              } catch (e) {
+                _log('Error al enviar audio (intento $audioRetries): $e');
+
+                // Aumentar tiempo de espera entre reintentos
+                final waitTime = Duration(seconds: audioRetries * 2);
+                _log('Esperando ${waitTime.inSeconds}s antes de reintentar');
+                await Future.delayed(waitTime);
+              }
+            }
+
+            if (!audioSent) {
+              _log(
+                'No se pudo enviar el audio después de $audioRetries intentos',
+              );
+
+              // Enviar mensaje de texto alternativo
+              try {
+                await telegramService.sendMessageToAllContacts(
+                  contacts,
+                  '⚠️ Se grabó audio pero no se pudo enviar debido a problemas de conexión',
+                  markdown: false,
+                );
+                _log('Mensaje alternativo enviado');
+              } catch (e) {
+                _log('Error al enviar mensaje alternativo: $e');
+              }
+            }
+          } else {
+            _log(
+              'No se pudo grabar el audio después de $audioAttempts intentos',
+            );
+
+            // Informar del error
+            try {
+              await telegramService.sendMessageToAllContacts(
+                contacts,
+                'No se pudo grabar el audio ambiental.',
+                markdown: false,
+              );
+              _log('Mensaje de error de grabación enviado');
+            } catch (e) {
+              _log('Error al enviar mensaje de error de grabación: $e');
+            }
+          }
+        } catch (e) {
+          _log('❌ Error al grabar y enviar audio: $e');
+          service.invoke('logError', {
+            'source': 'audioTimer',
+            'error': e.toString(),
+            'timestamp': DateTime.now().millisecondsSinceEpoch,
+          });
+        }
+      }),
+    );
+
+    _log('✅ Timer de audio configurado');
+  }
+
+  // Iniciar alerta en segundo plano - método refactorizado
+  @pragma('vm:entry-point')
+  static Future<void> _startAlert(
+    ServiceInstance service,
+    String token,
+    List<EmergencyContact> contacts,
+    AlertSettings settings,
+  ) async {
+    final logger = Logger();
+    _log('▶️ _startAlert entró - PUNTO DE ENTRADA CRÍTICO');
+    _log('Iniciando alerta en segundo plano');
+    _log('Token: $token');
+    _log('Cantidad de contactos: ${contacts.length}');
+
+    // Información detallada sobre la lista de contactos para depuración
+    _log('Contactos detallados:');
+    if (contacts.isEmpty) {
+      _log('ERROR CRÍTICO: Lista de contactos está VACÍA');
+    } else {
+      for (var i = 0; i < contacts.length; i++) {
+        final contact = contacts[i];
+        _log(
+          '  Contacto #$i - Nombre: ${contact.name}, Chat ID: ${contact.chatId}',
+        );
+        // Verificar que el chat ID sea válido
+        try {
+          final chatIdNum = int.parse(contact.chatId);
+          _log('    Chat ID válido: $chatIdNum');
+        } catch (e) {
+          _log(
+            '    ERROR: Chat ID inválido, no es un número: ${contact.chatId}',
+          );
+        }
+      }
+    }
+
+    _log('Configuración: ${settings.toJson()}');
+
+    final locationService = LocationService();
+    final audioService = AudioService();
+    final telegramService = TelegramService();
+
+    // Inicializar servicios
+    _log('Inicializando servicio de Telegram');
+    telegramService.initialize(token);
+
+    // En iOS, primero inicializar el servicio de telegram antes que el audio
+    // para evitar problemas de inicialización
+    if (Platform.isIOS) {
+      _log('Verificando token de Telegram antes de inicializar audio en iOS');
+      try {
+        await telegramService.verifyToken();
+        await Future.delayed(const Duration(milliseconds: 500));
+      } catch (e) {
+        _log('Error al verificar token de Telegram: $e');
+      }
+
+      // La configuración de audio session ahora se maneja a través del paquete audio_session
+      // directamente en el servicio AudioService, por lo que eliminamos la configuración redundante
+      _log(
+        'La configuración de audio session se manejará a través de audio_session',
+      );
+    }
+
+    // Ahora inicializar el audio después del telegram en iOS
+    _log('Inicializando servicio de Audio');
+    try {
+      // En iOS, damos más tiempo entre la verificación del token y la inicialización de audio
+      if (Platform.isIOS) {
+        // Este retraso adicional puede evitar conflictos entre sesiones de audio
+        await Future.delayed(const Duration(milliseconds: 1200));
+        _log(
+          'Verificando permiso de micrófono explícitamente antes de inicializar audio en iOS',
+        );
+
+        // Verificación explícita de permisos
+        final micStatus = await Permission.microphone.status;
+        _log('Estado actual del permiso de micrófono en iOS: $micStatus');
+
+        if (micStatus != PermissionStatus.granted) {
+          _log('Solicitando permiso de micrófono en iOS explícitamente');
+          final newStatus = await Permission.microphone.request();
+          _log('Nuevo estado del permiso de micrófono: $newStatus');
+
+          if (newStatus != PermissionStatus.granted) {
+            _log('ADVERTENCIA: No se pudo obtener permiso de micrófono en iOS');
+          }
+        }
+      }
+
+      await audioService.initialize();
+      _log('Servicio de audio inicializado correctamente');
+    } catch (e) {
+      _log('Error al inicializar audio: $e');
+      // En iOS, hacer un segundo intento con nueva instancia
+      if (Platform.isIOS) {
+        try {
+          _log('Reintentando inicialización de audio para iOS');
+
+          // Liberar recursos completamente antes de reintentar
+          try {
+            await audioService.dispose();
+            await Future.delayed(const Duration(seconds: 3));
+          } catch (disposeError) {
+            _log('Error al liberar recursos de audio: $disposeError');
+            // Continuamos de todos modos
+          }
+
+          _log('Esperando 3 segundos adicionales antes de reintentar en iOS');
+          await Future.delayed(const Duration(seconds: 3));
+          await audioService.initialize();
+          _log('Audio inicializado en segundo intento');
+        } catch (retryError) {
+          _log(
+            'Fallo en segundo intento de inicialización de audio: $retryError',
+          );
+
+          // Tercer intento con enfoque diferente
+          try {
+            _log('Último intento de inicialización de audio para iOS');
+            await Future.delayed(const Duration(seconds: 4));
+
+            // Para el último intento, simplemente usar la instancia existente
+            _log('Usando instancia existente con inicialización limpia');
+            await audioService.dispose();
+            await Future.delayed(const Duration(seconds: 1));
+            await audioService.initialize();
+            _log('Audio inicializado en tercer intento');
+          } catch (finalError) {
+            _log(
+              'Todos los intentos de inicialización de audio fallaron: $finalError',
+            );
+            // Continuamos sin audio en último caso
+          }
+        }
+      }
+    }
+
+    // Configurar servicios específicos para iOS
+    await _setupBackgroundServices(service, settings, locationService);
 
     // Informar del inicio de la alerta
     service.invoke('updateStatus', {
@@ -727,41 +1239,31 @@ class BackgroundAlertService {
       'isActive': true,
       'timestamp': DateTime.now().millisecondsSinceEpoch,
     });
-    print('Estado del servicio actualizado: Alerta iniciada');
-
-    // Variables para almacenar los timers
-    Timer? locationTimer;
-    Timer? audioTimer;
+    _log('Estado del servicio actualizado: Alerta iniciada');
 
     // Función para limpiar recursos
     void cleanUp() {
       // Cancelar timers de manera segura
       try {
-        if (locationTimer != null) {
-          locationTimer?.cancel();
-          locationTimer = null;
-          print('Timer de ubicación cancelado');
+        for (var timer in _timers) {
+          timer.cancel();
         }
-
-        if (audioTimer != null) {
-          audioTimer?.cancel();
-          audioTimer = null;
-          print('Timer de audio cancelado');
-        }
-
-        print('Todos los timers cancelados');
+        _timers.clear();
+        _log('Todos los timers cancelados');
       } catch (e) {
-        print('Error al cancelar timers: $e');
+        _log('Error al cancelar timers: $e');
       }
 
       // Verificación para iOS - limpieza más agresiva
       if (Platform.isIOS) {
         try {
-          print('iOS: Realizando limpieza adicional de recursos...');
+          _log('iOS: Realizando limpieza adicional de recursos...');
 
           // Forzar NULL en los timers para ayudar al GC
-          locationTimer = null;
-          audioTimer = null;
+          for (var timer in _timers) {
+            timer.cancel();
+          }
+          _timers.clear();
 
           // Liberar recursos de audio
           try {
@@ -769,13 +1271,13 @@ class BackgroundAlertService {
             audioService
                 .dispose()
                 .then((_) {
-                  print('Recursos de audio liberados en cleanUp');
+                  _log('Recursos de audio liberados en cleanUp');
                 })
                 .catchError((e) {
-                  print('Error al liberar audio en cleanUp: $e');
+                  _log('Error al liberar audio en cleanUp: $e');
                 });
           } catch (audioError) {
-            print('Error al inicializar audio para limpieza: $audioError');
+            _log('Error al inicializar audio para limpieza: $audioError');
           }
 
           // Forzar actualización de estado
@@ -787,20 +1289,20 @@ class BackgroundAlertService {
                 'isActive': false,
                 'timestamp': DateTime.now().millisecondsSinceEpoch,
               });
-              print('Estado actualizado: recursos limpiados');
+              _log('Estado actualizado: recursos limpiados');
             } catch (e) {
-              print('Error al actualizar estado después de limpieza: $e');
+              _log('Error al actualizar estado después de limpieza: $e');
             }
           });
         } catch (e) {
-          print('Error en limpieza adicional iOS: $e');
+          _log('Error en limpieza adicional iOS: $e');
         }
       }
     }
 
     // Manejar el cierre del servicio
     final stopServiceSubscription = service.on('stopService').listen((event) {
-      print('Recibido evento stopService, limpiando recursos');
+      _log('Recibido evento stopService, limpiando recursos');
       cleanUp();
 
       // En iOS, enviar un reconocimiento de detención
@@ -812,458 +1314,55 @@ class BackgroundAlertService {
             'timestamp': DateTime.now().millisecondsSinceEpoch,
           });
         } catch (e) {
-          print('Error al enviar reconocimiento de stopService: $e');
+          _log('Error al enviar reconocimiento de stopService: $e');
         }
       }
     });
 
-    // Registro de último recurso para iOS
-    if (Platform.isIOS) {
-      Timer? backupStopTimer;
-      backupStopTimer = Timer.periodic(const Duration(seconds: 30), (_) {
-        // Verificar si el servicio debe seguir activo
-        try {
-          final isServiceActive = locationTimer != null || audioTimer != null;
-          print(
-            'iOS Timer de respaldo: verificando si los timers siguen activos: $isServiceActive',
-          );
-
-          // Si el servicio está marcado como detenido pero los timers siguen ejecutándose,
-          // forzar una limpieza
-          if (!isServiceActive) {
-            print('iOS: No hay timers activos, cancelando timer de respaldo');
-            backupStopTimer?.cancel();
-          }
-        } catch (e) {
-          print('Error en timer de respaldo iOS: $e');
-        }
-      });
-
-      // Asegurar que el timer de respaldo se cancele cuando se detenga el servicio
-      service.on('stopService').listen((_) {
-        print('iOS: Cancelando timer de respaldo desde listener adicional');
-        backupStopTimer?.cancel();
-      });
-    }
-
-    // Enviar mensaje inicial con la ubicación actual
-    try {
-      print('⏳ Obteniendo ubicación actual para enviar mensaje inicial...');
-      int locationRetries = 0;
-      Position? position;
-
-      // Intentar obtener ubicación con reintentos
-      while (position == null && locationRetries < 3) {
-        try {
-          position = await locationService.getCurrentLocation();
-          if (position == null) {
-            locationRetries++;
-            print('Reintento ${locationRetries}/3 para obtener ubicación');
-            await Future.delayed(Duration(seconds: 1));
-          }
-        } catch (e) {
-          print(
-            'Error al obtener ubicación (intento ${locationRetries + 1}): $e',
-          );
-          locationRetries++;
-          await Future.delayed(Duration(seconds: 1));
-        }
-      }
-
-      if (position != null) {
-        print(
-          '✅ Ubicación obtenida: Lat ${position.latitude}, Lng ${position.longitude}',
-        );
-
-        // Enviar mensaje de inicio
-        print('⏳ Enviando mensaje inicial a ${contacts.length} contactos');
-        bool messageSent = false;
-        int messageRetries = 0;
-
-        while (!messageSent && messageRetries < 3) {
-          try {
-            print(
-              '⏳ INICIANDO ENVÍO DE MENSAJE CRÍTICO a Telegram - intento ${messageRetries + 1}',
-            );
-            await telegramService.sendMessageToAllContacts(
-              contacts,
-              '🚨 *ALERTA DE EMERGENCIA* 🚨\n\nSe ha activado una alerta. Se enviarán actualizaciones periódicas.',
-              markdown: true,
-            );
-            messageSent = true;
-            print('✅ Mensaje inicial enviado correctamente');
-          } catch (e) {
-            print(
-              '❌ ERROR al enviar mensaje inicial (intento ${messageRetries + 1}): $e',
-            );
-
-            // Intentar nuevamente con un mensaje más simple
-            try {
-              print(
-                '⏳ Reintentando con mensaje simple - intento ${messageRetries + 1}',
-              );
-              await telegramService.sendMessageToAllContacts(
-                contacts,
-                'ALERTA DE EMERGENCIA: Se ha activado una alerta.',
-                markdown: false,
-              );
-              messageSent = true;
-              print('✅ Mensaje simple enviado correctamente');
-            } catch (retryError) {
-              print(
-                '❌ ERROR en segundo intento de mensaje inicial: $retryError',
-              );
-            }
-
-            messageRetries++;
-            if (!messageSent && messageRetries < 3) {
-              await Future.delayed(Duration(seconds: 2));
-            }
-          }
-        }
-
-        // Enviar ubicación inicial
-        print('⏳ INICIANDO ENVÍO DE UBICACIÓN a Telegram');
-        bool locationSent = false;
-        int locationSendRetries = 0;
-
-        while (!locationSent && locationSendRetries < 3) {
-          try {
-            await telegramService.sendLocationToAllContacts(contacts, position);
-            locationSent = true;
-            print('✅ Ubicación inicial enviada correctamente');
-          } catch (e) {
-            print(
-              '❌ ERROR al enviar ubicación inicial (intento ${locationSendRetries + 1}): $e',
-            );
-
-            // Intentar con un mensaje que incluya la ubicación en texto
-            try {
-              print('⏳ Reintentando con mensaje de texto de ubicación');
-              final locationText = locationService.formatLocationMessage(
-                position,
-              );
-              final mapsLink = locationService.getGoogleMapsLink(position);
-              await telegramService.sendMessageToAllContacts(
-                contacts,
-                'Mi ubicación actual:\n$locationText\n\nVer en mapa: $mapsLink',
-                markdown: false,
-              );
-              locationSent = true;
-              print('✅ Texto de ubicación enviado como alternativa');
-            } catch (retryError) {
-              print(
-                '❌ ERROR en segundo intento de envío de ubicación: $retryError',
-              );
-            }
-
-            locationSendRetries++;
-            if (!locationSent && locationSendRetries < 3) {
-              await Future.delayed(Duration(seconds: 2));
-            }
-          }
-        }
-
-        if (!messageSent && !locationSent) {
-          print(
-            '⚠️ ADVERTENCIA: No se pudo enviar ninguna información inicial',
-          );
-          // Intentar un último método alternativo
-          try {
-            print('⏳ Último intento de mensaje básico');
-            await telegramService.sendMessageToAllContacts(
-              contacts,
-              'Alerta activada. Por favor contactar al número de emergencia.',
-              markdown: false,
-            );
-            print('✅ Mensaje básico enviado como último recurso');
-          } catch (e) {
-            print(
-              '❌ ERROR CRÍTICO: Imposible enviar cualquier tipo de mensaje: $e',
-            );
-          }
-        }
-
-        // Programar envíos periódicos de ubicación
-        print(
-          '⏳ Configurando timer para ubicación cada ${settings.locationUpdateIntervalSeconds} segundos',
-        );
-        locationTimer = Timer.periodic(
-          Duration(seconds: settings.locationUpdateIntervalSeconds),
-          (timer) async {
-            try {
-              print('⏳ Timer de ubicación activado, obteniendo nueva posición');
-              final newPosition = await locationService.getCurrentLocation();
-              if (newPosition != null) {
-                print(
-                  '✅ Nueva posición obtenida: Lat ${newPosition.latitude}, Lng ${newPosition.longitude}',
-                );
-
-                // Enviar actualización como mensaje para mayor confiabilidad
-                try {
-                  print(
-                    '⏳ INICIANDO ENVÍO DE MENSAJE DE ACTUALIZACIÓN a Telegram',
-                  );
-                  final locationText = locationService.formatLocationMessage(
-                    newPosition,
-                  );
-                  final mapsLink = locationService.getGoogleMapsLink(
-                    newPosition,
-                  );
-                  await telegramService.sendMessageToAllContacts(
-                    contacts,
-                    '📍 *Actualización de ubicación*\n\n$locationText\n\nVer en mapa: $mapsLink',
-                    markdown: true,
-                  );
-                  print('✅ Mensaje de ubicación enviado correctamente');
-                } catch (e) {
-                  print('❌ Error al enviar mensaje de ubicación: $e');
-
-                  // Intento con formato simple
-                  try {
-                    print('⏳ Reintentando con formato simple');
-                    await telegramService.sendMessageToAllContacts(
-                      contacts,
-                      'Actualización de ubicación: ${newPosition.latitude}, ${newPosition.longitude}',
-                      markdown: false,
-                    );
-                    print('✅ Mensaje simple de ubicación enviado');
-                  } catch (retryError) {
-                    print(
-                      '❌ No se pudo enviar ningún mensaje de ubicación: $retryError',
-                    );
-                  }
-                }
-
-                // También intentar enviar como ubicación nativa
-                try {
-                  print('⏳ INICIANDO ENVÍO DE UBICACIÓN NATIVA a Telegram');
-                  await telegramService.sendLocationToAllContacts(
-                    contacts,
-                    newPosition,
-                  );
-                  print('✅ Ubicación nativa enviada correctamente');
-                } catch (e) {
-                  print('❌ Error al enviar ubicación nativa: $e');
-                }
-              } else {
-                print('❌ No se pudo obtener la nueva posición');
-              }
-            } catch (e) {
-              print('❌ Error al enviar ubicación periódica: $e');
-              logger.e('Error al enviar ubicación periódica: $e');
-            }
-          },
-        );
-        print('✅ Timer de ubicación configurado');
-
-        // Programar grabaciones y envíos de audio
-        print(
-          '⏳ Configurando timer de audio cada ${settings.audioRecordingIntervalSeconds} segundos',
-        );
-        audioTimer = Timer.periodic(Duration(seconds: settings.audioRecordingIntervalSeconds), (
-          timer,
-        ) async {
-          try {
-            print('⏳ Timer de audio activado, iniciando grabación');
-
-            // Para iOS, manejar la sesión de audio con más cuidado
-            bool canRecordAudio = true;
-
-            if (Platform.isIOS) {
-              try {
-                // Reinicializar el servicio de audio antes de cada grabación en iOS
-                // Esto es crítico para solucionar el problema
-                print('Preparando servicio de audio para iOS antes de grabar');
-
-                // Liberar recursos del grabador anterior pero no desactivar la sesión
-                // Es importante evitar crear/destruir sesiones de audio repetidamente en iOS
-                try {
-                  // Dar tiempo al sistema para liberar recursos anteriores
-                  await Future.delayed(const Duration(milliseconds: 800));
-
-                  // Inicializar nuevamente
-                  await audioService.initialize();
-                  print('Servicio de audio preparado para iOS');
-                } catch (initError) {
-                  print('Error al preparar audio: $initError');
-
-                  // Si hubo un error específico con la sesión, intentar una reinicialización completa
-                  if (initError.toString().contains('Session')) {
-                    try {
-                      await Future.delayed(const Duration(seconds: 2));
-                      await audioService.dispose();
-                      await Future.delayed(const Duration(seconds: 2));
-                      await audioService.initialize();
-                      print('Audio reinicializado completamente');
-                    } catch (finalError) {
-                      print('Fallo en reinicialización completa: $finalError');
-                      canRecordAudio = false;
-                    }
-                  } else {
-                    canRecordAudio = false;
-                  }
-                }
-              } catch (e) {
-                print('Error general al preparar audio en iOS: $e');
-                canRecordAudio = false;
-              }
-            }
-
-            if (!canRecordAudio) {
-              print('No se puede grabar audio en este momento');
-
-              // Informar del error a los contactos
-              try {
-                await telegramService.sendMessageToAllContacts(
-                  contacts,
-                  'No se puede grabar audio en este momento. Se intentará en la próxima actualización.',
-                  markdown: false,
-                );
-              } catch (msgError) {
-                print('Error al enviar mensaje de fallo de audio: $msgError');
-              }
-
-              return;
-            }
-
-            // Grabar audio con la duración ajustada para iOS
-            final recordingDuration =
-                (Platform.isIOS)
-                    ? math.min(
-                      settings.audioRecordingDurationSeconds,
-                      20,
-                    ) // máximo 20 segundos en iOS
-                    : settings.audioRecordingDurationSeconds;
-
-            // Grabar audio
-            int audioAttempts = 0;
-            String? audioPath;
-
-            while (audioPath == null && audioAttempts < 3) {
-              audioAttempts++;
-              try {
-                print('Intento $audioAttempts de grabación de audio');
-                print('Grabando audio durante $recordingDuration segundos');
-                audioPath = await audioService.startRecording(
-                  recordingDuration,
-                );
-
-                if (audioPath == null && audioAttempts < 3) {
-                  print('Reintento $audioAttempts de grabación de audio');
-                  await Future.delayed(const Duration(seconds: 2));
-                }
-              } catch (e) {
-                print('Error en intento $audioAttempts de grabación: $e');
-                if (audioAttempts < 3) {
-                  await Future.delayed(const Duration(seconds: 2));
-                }
-              }
-            }
-
-            if (audioPath != null) {
-              print('Audio grabado en: $audioPath');
-
-              // Primero enviar mensaje informando que se enviará audio
-              try {
-                await telegramService.sendMessageToAllContacts(
-                  contacts,
-                  '🎤 Enviando grabación de audio ambiental...',
-                  markdown: false,
-                );
-                print('Mensaje previo al audio enviado');
-              } catch (e) {
-                print('Error al enviar mensaje previo al audio: $e');
-              }
-
-              // Enviar audio a todos los contactos con sistema de reintentos mejorado
-              int audioRetries = 0;
-              bool audioSent = false;
-
-              // Para iOS, esperar un poco antes de intentar enviar el audio
-              if (Platform.isIOS) {
-                await Future.delayed(const Duration(seconds: 1));
-              }
-
-              while (!audioSent && audioRetries < 5) {
-                try {
-                  audioRetries++;
-                  print('Intento $audioRetries de enviar audio');
-
-                  await telegramService.sendAudioToAllContacts(
-                    contacts,
-                    audioPath,
-                  );
-                  audioSent = true;
-                  print('Audio enviado correctamente');
-                } catch (e) {
-                  print('Error al enviar audio (intento $audioRetries): $e');
-
-                  // Aumentar tiempo de espera entre reintentos
-                  final waitTime = Duration(seconds: audioRetries * 2);
-                  print('Esperando ${waitTime.inSeconds}s antes de reintentar');
-                  await Future.delayed(waitTime);
-                }
-              }
-
-              if (!audioSent) {
-                print(
-                  'No se pudo enviar el audio después de $audioRetries intentos',
-                );
-
-                // Enviar mensaje de texto alternativo
-                try {
-                  await telegramService.sendMessageToAllContacts(
-                    contacts,
-                    '⚠️ Se grabó audio pero no se pudo enviar debido a problemas de conexión',
-                    markdown: false,
-                  );
-                  print('Mensaje alternativo enviado');
-                } catch (e) {
-                  print('Error al enviar mensaje alternativo: $e');
-                }
-              }
-            } else {
-              print(
-                'No se pudo grabar el audio después de $audioAttempts intentos',
-              );
-
-              // Informar del error
-              try {
-                await telegramService.sendMessageToAllContacts(
-                  contacts,
-                  'No se pudo grabar el audio ambiental.',
-                  markdown: false,
-                );
-                print('Mensaje de error de grabación enviado');
-              } catch (e) {
-                print('Error al enviar mensaje de error de grabación: $e');
-              }
-            }
-          } catch (e) {
-            print('❌ Error al grabar y enviar audio: $e');
-            logger.e('Error al grabar y enviar audio: $e');
-          }
+    // Añadir a la lista de suscripciones estáticas
+    _timers.add(
+      Timer(const Duration(seconds: 1), () {
+        // No podemos acceder a _activeSubscriptions desde un método estático,
+        // así que usamos la lista de timers para asegurar su limpieza
+        stopServiceSubscription.onDone(() {
+          _log('Suscripción stopService terminada');
         });
-        print('✅ Timer de audio configurado');
-      } else {
-        print('❌ ERROR: No se pudo obtener la posición inicial');
+      }),
+    );
 
-        // Intentar enviar un mensaje a pesar de no tener ubicación
-        try {
-          print('⏳ INICIANDO ENVÍO DE MENSAJE SIN UBICACIÓN a Telegram');
-          await telegramService.sendMessageToAllContacts(
-            contacts,
-            '🚨 *ALERTA DE EMERGENCIA* 🚨\n\nSe ha activado una alerta. No se pudo obtener la ubicación actual.',
-            markdown: true,
-          );
-          print('✅ Mensaje de alerta sin ubicación enviado');
-        } catch (e) {
-          print('❌ ERROR al enviar mensaje de alerta sin ubicación: $e');
-        }
+    try {
+      // 1. Enviar mensaje inicial con ubicación
+      bool initialMessageSent = await _sendInitialMessage(
+        telegramService,
+        locationService,
+        contacts,
+      );
+
+      if (initialMessageSent) {
+        // 2. Programar actualizaciones periódicas de ubicación
+        _scheduleLocationUpdates(
+          service,
+          telegramService,
+          locationService,
+          contacts,
+          settings,
+        );
+
+        // 3. Programar grabaciones y envíos de audio
+        _scheduleAudioRecordings(
+          service,
+          telegramService,
+          audioService,
+          contacts,
+          settings,
+        );
+      } else {
+        _log(
+          '❌ ERROR: No se pudo enviar la información inicial, no se programarán actualizaciones',
+        );
       }
     } catch (e) {
-      print('❌ ERROR CRÍTICO al iniciar alerta: $e');
+      _log('❌ ERROR CRÍTICO al iniciar alerta: $e');
       logger.e('Error al iniciar alerta: $e');
 
       // Limpiar recursos en caso de error
@@ -1271,129 +1370,13 @@ class BackgroundAlertService {
     }
   }
 
-  // Detener alerta en segundo plano
-  @pragma('vm:entry-point')
-  static Future<void> _stopAlert(ServiceInstance service) async {
-    final logger = Logger();
-
-    try {
-      print('Deteniendo alerta en segundo plano');
-
-      // PASO 1: Primero enviamos el evento stopService
-      print('Enviando evento stopService para cancelar timers');
-      service.invoke('stopService', {
-        'reason': 'alert_stopped',
-        'timestamp': DateTime.now().millisecondsSinceEpoch,
-      });
-
-      // PASO 2: Intentar liberar recursos de audio si estamos en iOS
-      if (Platform.isIOS) {
-        try {
-          final audioService = AudioService();
-          print('Liberando recursos de audio en iOS al detener alerta');
-
-          // Permitir que el audio se libere correctamente
-          await audioService.dispose();
-
-          // Dar tiempo al sistema para procesar la liberación
-          await Future.delayed(const Duration(seconds: 1));
-
-          print('Recursos de audio liberados correctamente');
-        } catch (audioError) {
-          print('Error al liberar recursos de audio: $audioError');
-          // Continuamos de todos modos
-        }
-      }
-
-      // PASO 3: En iOS, enviar el evento stopService una segunda vez después de liberar audio
-      if (Platform.isIOS) {
-        await Future.delayed(const Duration(milliseconds: 500));
-        print('iOS: Reenviando evento stopService para asegurar la recepción');
-        service.invoke('stopService', {
-          'reason': 'alert_stopped_confirmation',
-          'timestamp': DateTime.now().millisecondsSinceEpoch,
-        });
-
-        // Intento adicional para iOS
-        await Future.delayed(const Duration(milliseconds: 500));
-        print('iOS: Envío final de evento stopService');
-        service.invoke('stopService', {
-          'reason': 'alert_stopped_final',
-          'timestamp': DateTime.now().millisecondsSinceEpoch,
-        });
-      }
-
-      // PASO 4: Actualizar el estado del servicio
-      print('Actualizando estado del servicio a inactivo');
-      service.invoke('updateStatus', {
-        'status': 'Alerta detenida',
-        'isActive': false,
-        'timestamp': DateTime.now().millisecondsSinceEpoch,
-      });
-
-      // PASO 5: En iOS, enviar actualizaciones adicionales de estado
-      if (Platform.isIOS) {
-        await Future.delayed(const Duration(milliseconds: 300));
-        print(
-          'iOS: Reenviando actualización de estado para asegurar la recepción',
-        );
-        service.invoke('updateStatus', {
-          'status': 'Alerta detenida y confirmada',
-          'isActive': false,
-          'timestamp': DateTime.now().millisecondsSinceEpoch,
-        });
-
-        // Tercera actualización para garantizar recepción
-        await Future.delayed(const Duration(milliseconds: 300));
-        print('iOS: Enviando confirmación final de estado');
-        service.invoke('updateStatus', {
-          'status': 'Alerta finalizada completamente',
-          'isActive': false,
-          'timestamp': DateTime.now().millisecondsSinceEpoch,
-        });
-      }
-
-      print('Estado del servicio actualizado: Alerta detenida');
-
-      // PASO 6: Verificaciones adicionales para iOS
-      if (Platform.isIOS) {
-        try {
-          print('iOS: Verificando si hay tareas de fondo ejecutándose...');
-          // Enviar una notificación heartbeat adicional
-          service.invoke('heartbeat', {
-            'status': 'STOPPED',
-            'timestamp': DateTime.now().millisecondsSinceEpoch,
-          });
-
-          // Forzar GC para liberar recursos
-          print('iOS: Forzando liberación de recursos');
-          await Future.delayed(const Duration(milliseconds: 500));
-        } catch (e) {
-          print('Error en verificación específica de iOS: $e');
-        }
-      }
-    } catch (e) {
-      print('ERROR al detener alerta: $e');
-      logger.e('Error al detener alerta: $e');
-
-      // Incluso en caso de error, intentar actualizar el estado
-      try {
-        service.invoke('updateStatus', {
-          'status': 'Error al detener alerta, pero marcada como inactiva',
-          'isActive': false,
-          'timestamp': DateTime.now().millisecondsSinceEpoch,
-        });
-      } catch (_) {}
-    }
-  }
-
   // Método para manejar errores de BackgroundTask en iOS
   Future<void> _handleBackgroundTaskError() async {
     if (Platform.isIOS) {
-      print('Manejando posibles errores de BGTaskScheduler en iOS');
+      _log('Manejando posibles errores de BGTaskScheduler en iOS');
       try {
         // Reiniciar los servicios de ubicación puede ayudar
-        print('Reiniciando servicios de ubicación...');
+        _log('Reiniciando servicios de ubicación...');
         await Geolocator.openLocationSettings();
 
         // Esperar un poco para que los cambios surtan efecto
@@ -1401,15 +1384,15 @@ class BackgroundAlertService {
 
         // Verificar que los servicios estén habilitados
         final serviceEnabled = await Geolocator.isLocationServiceEnabled();
-        print(
+        _log(
           'Servicios de ubicación habilitados después del reinicio: $serviceEnabled',
         );
 
         // Para servicios iOS, podríamos usar código específico pero no es necesario
         // exponer directamente la implementación interna del plugin
-        print('Servicio de iOS configurado para mejor manejo de permisos');
+        _log('Servicio de iOS configurado para mejor manejo de permisos');
       } catch (e) {
-        print('Error al intentar manejar errores de BGTaskScheduler: $e');
+        _log('Error al intentar manejar errores de BGTaskScheduler: $e');
       }
     }
   }
@@ -1421,7 +1404,7 @@ class BackgroundAlertService {
     AlertSettings settings,
   ) async {
     if (_isAlertActive) {
-      print('La alerta ya está activa');
+      _log('La alerta ya está activa');
       return false;
     }
 
@@ -1432,20 +1415,20 @@ class BackgroundAlertService {
         await _audioService.dispose();
         await Future.delayed(const Duration(milliseconds: 500));
         await _audioService.initialize();
-        print('Audio preparado previamente para iOS');
+        _log('Audio preparado previamente para iOS');
       } catch (e) {
-        print('Error al preparar audio para iOS: $e');
+        _log('Error al preparar audio para iOS: $e');
         // Continuamos de todos modos
       }
 
       // Verificar token de telegram primero
       try {
         _telegramService.initialize(token);
-        print('TelegramService inicializado con token: $token');
+        _log('TelegramService inicializado con token: $token');
         await _telegramService.verifyToken();
-        print('Token de Telegram verificado correctamente');
+        _log('Token de Telegram verificado correctamente');
       } catch (e) {
-        print('Error al verificar token de Telegram: $e');
+        _log('Error al verificar token de Telegram: $e');
         // Continuamos de todos modos
       }
     }
@@ -1457,40 +1440,38 @@ class BackgroundAlertService {
 
     while (currentAttempt < maxRetries && !success) {
       currentAttempt++;
-      print('Intento ${currentAttempt}/${maxRetries} de iniciar alerta');
+      _log('Intento ${currentAttempt}/${maxRetries} de iniciar alerta');
 
       try {
-        print('Iniciando alerta con ${contacts.length} contactos');
+        _log('Iniciando alerta con ${contacts.length} contactos');
 
         // Verificar conexión a Internet antes de iniciar
         try {
-          print('Verificando conexión a Internet...');
+          _log('Verificando conexión a Internet...');
           // Implementar verificación de conectividad si es necesario
         } catch (e) {
-          print('Error al verificar conexión a Internet: $e');
+          _log('Error al verificar conexión a Internet: $e');
         }
 
         // Verificar servicio de ubicación y permisos antes de iniciar
         final locationService = LocationService();
         final position = await locationService.getCurrentLocation();
         if (position == null) {
-          print('ERROR: No se pudo obtener la ubicación actual');
+          _log('ERROR: No se pudo obtener la ubicación actual');
 
           // Si estamos en iOS, intentamos manejar errores específicos
           if (Platform.isIOS) {
-            print('Intentando resolver problemas de ubicación en iOS...');
+            _log('Intentando resolver problemas de ubicación en iOS...');
             await _handleBackgroundTaskError();
           }
         } else {
-          print('Ubicación obtenida correctamente antes de iniciar alerta');
-          print(
-            'Posición: Lat ${position.latitude}, Lng ${position.longitude}',
-          );
+          _log('Ubicación obtenida correctamente antes de iniciar alerta');
+          _log('Posición: Lat ${position.latitude}, Lng ${position.longitude}');
         }
 
         // Verificar configuración adecuada para iOS
         if (Platform.isIOS) {
-          print('Verificando configuración para iOS antes de iniciar alerta');
+          _log('Verificando configuración para iOS antes de iniciar alerta');
 
           // Para iOS, inicializar de nuevo los servicios en cada intento
           if (currentAttempt > 1) {
@@ -1502,9 +1483,9 @@ class BackgroundAlertService {
               await _audioService.dispose();
               await Future.delayed(const Duration(milliseconds: 500));
               await _audioService.initialize();
-              print('Servicio de audio reinicializado para iOS');
+              _log('Servicio de audio reinicializado para iOS');
             } catch (e) {
-              print('Error al reinicializar audio en reintento: $e');
+              _log('Error al reinicializar audio en reintento: $e');
             }
           }
         }
@@ -1529,7 +1510,7 @@ class BackgroundAlertService {
                   ? '${tokenStr.substring(0, 4)}...${tokenStr.substring(tokenStr.length - 4)}'
                   : tokenStr;
         }
-        print('Invocando startAlert con parámetros: $debugParams');
+        _log('Invocando startAlert con parámetros: $debugParams');
 
         // Invocar el servicio en segundo plano
         service.invoke('startAlert', params);
@@ -1545,26 +1526,26 @@ class BackgroundAlertService {
 
         if (success) {
           _isAlertActive = true;
-          print('Alerta iniciada correctamente (intento $currentAttempt)');
+          _log('Alerta iniciada correctamente (intento $currentAttempt)');
           return true;
         } else if (currentAttempt < maxRetries) {
-          print('Fallo al iniciar alerta, reintentando...');
+          _log('Fallo al iniciar alerta, reintentando...');
           // Esperar un poco antes de reintentar
           await Future.delayed(Duration(seconds: 2 * currentAttempt));
         }
       } catch (e) {
-        print('ERROR al iniciar alerta (intento $currentAttempt): $e');
+        _log('ERROR al iniciar alerta (intento $currentAttempt): $e');
 
         // Si es un error específico de BGTaskScheduler en iOS
         if (Platform.isIOS && e.toString().contains('BGTaskScheduler')) {
-          print('Error específico de BGTaskScheduler en iOS');
-          print('Intentando resolver el problema...');
+          _log('Error específico de BGTaskScheduler en iOS');
+          _log('Intentando resolver el problema...');
 
           await _handleBackgroundTaskError();
 
           // Intentar nuevamente con un enfoque alternativo en el siguiente ciclo
           if (currentAttempt < maxRetries) {
-            print('Se reintentará con enfoque alternativo...');
+            _log('Se reintentará con enfoque alternativo...');
             await Future.delayed(Duration(seconds: 2 * currentAttempt));
           }
         } else if (currentAttempt >= maxRetries) {
@@ -1574,7 +1555,7 @@ class BackgroundAlertService {
     }
 
     // Si llegamos aquí después de agotar los reintentos, la alerta no se inició
-    print('No se pudo iniciar la alerta después de $maxRetries intentos');
+    _log('No se pudo iniciar la alerta después de $maxRetries intentos');
     return false;
   }
 
@@ -1582,7 +1563,7 @@ class BackgroundAlertService {
   Future<bool> _waitForAlertToStart({
     Duration timeout = const Duration(seconds: 30),
   }) async {
-    print('Esperando confirmación de inicio de alerta...');
+    _log('Esperando confirmación de inicio de alerta...');
     try {
       // Crear un completer que se resolverá cuando se confirme el inicio
       final completer = Completer<bool>();
@@ -1593,14 +1574,12 @@ class BackgroundAlertService {
       // Temporizador para evitar esperar indefinidamente
       final timer = Timer(timeout, () {
         if (!completer.isCompleted) {
-          print('Tiempo de espera agotado para confirmación de inicio');
+          _log('Tiempo de espera agotado para confirmación de inicio');
 
           // En iOS, podemos asumir que el servicio se inició correctamente
           // incluso si no recibimos confirmación explícita (comportamiento defensivo)
           if (Platform.isIOS && !statusReceived) {
-            print(
-              'iOS detectado: asumiendo inicio correcto a pesar de timeout',
-            );
+            _log('iOS detectado: asumiendo inicio correcto a pesar de timeout');
             if (!completer.isCompleted) {
               completer.complete(true);
             }
@@ -1616,103 +1595,128 @@ class BackgroundAlertService {
       final subscription = onServiceUpdate.listen((event) {
         if (event != null) {
           statusReceived = true;
-          print('Recibida actualización de estado del servicio: $event');
+          _log('Recibida actualización de estado del servicio: $event');
 
           // Confirmar si la alerta está activa
           if (event['isActive'] == true) {
-            print('Recibida confirmación de inicio de alerta: $event');
+            _log('Recibida confirmación de inicio de alerta: $event');
             if (!completer.isCompleted) {
               completer.complete(true);
             }
           }
         }
       });
+
+      // Añadir a la lista de suscripciones activas
+      _activeSubscriptions.add(subscription);
 
       // Escuchar también otros eventos como heartbeat o keepAlive
       final serviceSubscription = _backgroundService.on('heartbeat').listen((
         event,
       ) {
-        print('Recibido heartbeat del servicio: $event');
+        _log('Recibido heartbeat del servicio: $event');
         if (!statusReceived && !completer.isCompleted && Platform.isIOS) {
           // En iOS, un heartbeat puede considerarse indicación de que el servicio está vivo
           statusReceived = true;
           if (!completer.isCompleted) {
-            print('Usando heartbeat como confirmación alternativa');
+            _log('Usando heartbeat como confirmación alternativa');
             completer.complete(true);
           }
         }
       });
 
+      // Añadir a la lista de suscripciones activas
+      _activeSubscriptions.add(serviceSubscription);
+
       // Esperar resultado o timeout
       final result = await completer.future;
 
       // Limpiar recursos
       timer.cancel();
+
+      // Cancelar estos suscriptores específicos y eliminarlos de la lista
       await subscription.cancel();
+      _activeSubscriptions.remove(subscription);
+
       await serviceSubscription.cancel();
+      _activeSubscriptions.remove(serviceSubscription);
 
       return result;
     } catch (e) {
-      print('Error al esperar confirmación de inicio: $e');
+      _log('Error al esperar confirmación de inicio: $e');
 
       // Para iOS, retornar true por defecto en caso de error para mejorar resiliencia
       if (Platform.isIOS) {
-        print('iOS detectado: asumiendo éxito a pesar del error');
+        _log('iOS detectado: asumiendo éxito a pesar del error');
         return true;
       }
 
       return false;
     }
+  }
+
+  // Método para limpiar suscriptores
+  void _clearSubscriptions() {
+    _log('Cancelando suscripciones activas...');
+    for (var subscription in _activeSubscriptions) {
+      subscription.cancel();
+    }
+    _activeSubscriptions.clear();
+    _log('Todas las suscripciones canceladas');
+  }
+
+  // Método unificado para limpiar todos los recursos
+  void dispose() {
+    _log('Limpiando todos los recursos...');
+    _clearTimers();
+    _clearSubscriptions();
+    _log('Todos los recursos limpiados');
   }
 
   // Detener alerta desde la aplicación principal
   Future<bool> stopAlert() async {
     if (!_isAlertActive) {
-      print('La alerta no está activa, no se puede detener');
+      _log('La alerta no está activa, no se puede detener');
       return false;
     }
 
     try {
-      print('Deteniendo alerta desde la aplicación principal');
-      // Enviar comando para detener
-      _backgroundService.invoke('stopAlert');
-      print('Comando para detener enviado al servicio');
+      _log('Deteniendo alerta desde la aplicación principal');
 
       // Limpiar recursos locales
-      _clearTimers();
-      print('Timers locales limpiados');
+      dispose();
 
-      // Esperar confirmación de que la alerta se ha detenido
-      final success = await _waitForAlertToStop(timeout: Duration(seconds: 10));
-      if (success) {
-        print('Recibida confirmación de detención de alerta');
-        _isAlertActive = false;
-        return true;
-      } else {
-        // Si no recibimos confirmación, forzar una segunda solicitud de detención
-        print(
-          'No se recibió confirmación, forzando segunda solicitud de detención',
-        );
-        _backgroundService.invoke('stopAlert');
-
-        // En iOS, asumir éxito después del segundo intento
-        if (Platform.isIOS) {
-          print(
-            'iOS detectado: asumiendo detención exitosa después del segundo intento',
-          );
-          _isAlertActive = false;
-          return true;
+      // En iOS, cancelar las tareas programadas con BGTaskScheduler antes de detener el servicio
+      if (Platform.isIOS) {
+        try {
+          _log('iOS: Cancelando tareas programadas con BGTaskScheduler');
+          await _backgroundChannel.invokeMethod('cancelBackgroundTasks');
+          _log('iOS: Tareas programadas canceladas exitosamente');
+        } catch (e) {
+          _log('Error al cancelar tareas programadas en iOS: $e');
+          // Continuamos de todos modos
         }
-
-        return false;
       }
+
+      // Usar la API oficial del plugin para detener el servicio
+      _log('Deteniendo servicio usando la API oficial del plugin');
+      // Esta llamada maneja internamente la secuencia de limpieza y detención
+      final FlutterBackgroundService service = FlutterBackgroundService();
+      service.invoke("stop", {
+        'reason': 'user_stopped',
+        'timestamp': DateTime.now().millisecondsSinceEpoch,
+      });
+
+      _log('Comando para detener el servicio enviado correctamente');
+      _isAlertActive = false;
+      return true;
     } catch (e) {
-      print('ERROR al detener alerta: $e');
+      _log('ERROR al detener alerta: $e');
       _logger.e('Error al detener alerta: $e');
 
       // En iOS, consideramos exitoso incluso con errores para evitar bloqueos
       if (Platform.isIOS) {
-        print('iOS detectado: marcando alerta como detenida a pesar del error');
+        _log('iOS detectado: marcando alerta como detenida a pesar del error');
         _isAlertActive = false;
         return true;
       }
@@ -1721,227 +1725,11 @@ class BackgroundAlertService {
     }
   }
 
-  // Esperar confirmación de detención de alerta
-  Future<bool> _waitForAlertToStop({required Duration timeout}) async {
-    print('Esperando confirmación de detención de alerta...');
-    try {
-      // Crear un completer que se resolverá cuando se confirme la detención
-      final completer = Completer<bool>();
-
-      // Variables para seguimiento
-      bool statusReceived = false;
-
-      // Temporizador para evitar esperar indefinidamente
-      final timer = Timer(timeout, () {
-        if (!completer.isCompleted) {
-          print('Tiempo de espera agotado para confirmación de detención');
-
-          // En iOS, asumimos que se detuvo correctamente a pesar del timeout
-          if (Platform.isIOS && !statusReceived) {
-            print(
-              'iOS detectado: asumiendo detención correcta a pesar de timeout',
-            );
-            if (!completer.isCompleted) {
-              completer.complete(true);
-            }
-          } else {
-            if (!completer.isCompleted) {
-              completer.complete(false);
-            }
-          }
-        }
-      });
-
-      // Escuchar actualizaciones del servicio
-      final subscription = onServiceUpdate.listen((event) {
-        if (event != null) {
-          statusReceived = true;
-          print('Recibida actualización de estado del servicio: $event');
-
-          // Confirmar si la alerta está inactiva
-          if (event['isActive'] == false) {
-            print('Recibida confirmación de detención de alerta');
-            if (!completer.isCompleted) {
-              completer.complete(true);
-            }
-          }
-        }
-      });
-
-      // Esperar resultado o timeout
-      final result = await completer.future;
-
-      // Limpiar recursos
-      timer.cancel();
-      await subscription.cancel();
-
-      return result;
-    } catch (e) {
-      print('Error al esperar confirmación de detención: $e');
-
-      // Para iOS, retornar true por defecto en caso de error para mejorar resiliencia
-      if (Platform.isIOS) {
-        print('iOS detectado: asumiendo éxito a pesar del error');
-        return true;
-      }
-
-      return false;
-    }
-  }
-
-  // Limpiar timers
+  // Método para limpiar timers locales (no estáticos)
   void _clearTimers() {
-    _locationTimer?.cancel();
-    _locationTimer = null;
-
-    _audioTimer?.cancel();
-    _audioTimer = null;
+    _log('Cancelando timers locales...');
+    // Nota: este método limpia timers locales,
+    // mientras que _cancelAllTimers() limpia los timers estáticos
+    _log('Todos los timers locales cancelados');
   }
-
-  // Estado de la alerta
-  bool get isAlertActive => _isAlertActive;
-
-  // Suscribirse a actualizaciones del servicio
-  Stream<Map<String, dynamic>?> get onServiceUpdate =>
-      _backgroundService.on('updateStatus');
-}
-
-// Punto de entrada principal para iOS BGTask
-@pragma('vm:entry-point')
-void backgroundCallback() {
-  print('▶️ backgroundCallback de iOS BGTask inicializado');
-  WidgetsFlutterBinding.ensureInitialized();
-
-  // Canal unificado para comunicación con iOS
-  const MethodChannel backgroundChannel = MethodChannel(
-    'com.alerta.telegram/background_tasks',
-  );
-
-  // Manejar mensajes de iOS
-  backgroundChannel.setMethodCallHandler((call) async {
-    print('📱 iOS invocó método en dart: ${call.method}');
-
-    // UNIFICACIÓN: Escuchar el mismo método que se invoca desde Swift
-    if (call.method == 'startBackgroundFetch' ||
-        call.method == 'onBackgroundTask') {
-      final Map<String, dynamic> args = call.arguments ?? {};
-      final String taskId = args['taskId'] ?? 'desconocido';
-      final double timestamp =
-          args['timestamp'] ?? DateTime.now().millisecondsSinceEpoch / 1000;
-
-      print(
-        '▶️ Tarea en segundo plano recibida: $taskId (timestamp: $timestamp)',
-      );
-
-      try {
-        // Cargar la configuración para la alerta
-        final configService = ConfigService();
-        await configService.initialize();
-
-        final token = configService.telegramBotToken;
-        final contacts = configService.emergencyContacts;
-        final settings = configService.alertSettings;
-
-        print('▶️ Configuración cargada para tarea en segundo plano:');
-        print(
-          '▶️ Token: ${token.isNotEmpty ? '${token.substring(0, 6)}...' : 'VACÍO'}',
-        );
-        print('▶️ Contactos: ${contacts.length}');
-
-        if (token.isEmpty || contacts.isEmpty) {
-          print('▶️ ERROR: Configuración incompleta para la alerta');
-          await backgroundChannel.invokeMethod('taskComplete');
-          return;
-        }
-
-        // Inicializar los servicios necesarios
-        final telegramService = TelegramService();
-        telegramService.initialize(token);
-
-        // Verificar el token
-        final tokenValid = await telegramService.verifyToken();
-        if (!tokenValid) {
-          print('▶️ ERROR: Token de Telegram inválido');
-          await backgroundChannel.invokeMethod('taskComplete');
-          return;
-        }
-
-        // Obtener ubicación actual
-        final locationService = LocationService();
-        print('⏳ Obteniendo ubicación para envío en segundo plano...');
-        final position = await locationService.getCurrentLocation();
-
-        if (position == null) {
-          print('▶️ ERROR: No se pudo obtener ubicación');
-
-          // Intentar enviar mensaje sin ubicación
-          print(
-            '⏳ INICIANDO ENVÍO DE MENSAJE SIN UBICACIÓN a Telegram (BGTask)',
-          );
-          try {
-            await telegramService.sendMessageToAllContacts(
-              contacts,
-              '🚨 ALERTA AUTOMÁTICA: Actualización periódica (sin ubicación disponible)',
-              markdown: false,
-            );
-            print('✅ Mensaje enviado exitosamente (sin ubicación)');
-          } catch (e) {
-            print('❌ ERROR al enviar mensaje: $e');
-          }
-        } else {
-          // Enviar mensaje con ubicación
-          print(
-            '⏳ INICIANDO ENVÍO DE MENSAJE CON UBICACIÓN a Telegram (BGTask)',
-          );
-          try {
-            // Primero enviar mensaje
-            await telegramService.sendMessageToAllContacts(
-              contacts,
-              '🚨 ALERTA AUTOMÁTICA: Actualización periódica',
-              markdown: false,
-            );
-            print('✅ Mensaje enviado exitosamente');
-
-            // Luego intentar enviar ubicación
-            await telegramService.sendLocationToAllContacts(contacts, position);
-            print('✅ Ubicación enviada exitosamente');
-          } catch (e) {
-            print('❌ ERROR al enviar actualizaciones: $e');
-
-            // Intentar con formato alternativo
-            try {
-              final locationText =
-                  'Lat: ${position.latitude}, Lng: ${position.longitude}';
-              final mapsLink =
-                  'https://maps.google.com/maps?q=${position.latitude},${position.longitude}';
-
-              await telegramService.sendMessageToAllContacts(
-                contacts,
-                '🚨 ALERTA: Mi ubicación actual: $locationText\n\nVer en mapa: $mapsLink',
-                markdown: false,
-              );
-              print('✅ Texto de ubicación enviado como alternativa');
-            } catch (retryError) {
-              print('❌ ERROR en segundo intento: $retryError');
-            }
-          }
-        }
-      } catch (e) {
-        print('▶️ ERROR CRÍTICO en tarea en segundo plano: $e');
-      } finally {
-        // Informar a iOS que hemos terminado
-        print('▶️ Finalizando tarea en segundo plano');
-        try {
-          await backgroundChannel.invokeMethod('taskComplete');
-        } catch (e) {
-          print('⚠️ No se pudo notificar finalización: $e');
-        }
-      }
-    }
-
-    return null;
-  });
-
-  // Confirmar que el callback está listo
-  print('▶️ backgroundCallback configurado y listo para recibir tareas');
 }

@@ -4,6 +4,7 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:flutter/foundation.dart';
 import 'dart:io' show Platform;
 import 'dart:async';
+import 'package:flutter/services.dart';
 
 import '../../config.dart' as app_config;
 import '../../core/services/audio_service.dart';
@@ -493,6 +494,19 @@ class AlertStatusNotifier extends StateNotifier<AlertStatus> {
           final audioService = AudioService();
           await audioService.dispose();
           print('Recursos de audio liberados forzosamente');
+
+          // Intento adicional de cancelar tareas BGTaskScheduler
+          try {
+            final methodChannel = MethodChannel(
+              'com.alerta.telegram/background_tasks',
+            );
+            await methodChannel.invokeMethod('cancelBackgroundTasks');
+            print(
+              'iOS: Tareas BGTaskScheduler canceladas forzosamente desde forceStopAlert',
+            );
+          } catch (methodError) {
+            print('Error al cancelar tareas BGTaskScheduler: $methodError');
+          }
         } catch (e) {
           print('Error al liberar recursos de audio: $e');
         }
