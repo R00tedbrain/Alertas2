@@ -326,8 +326,20 @@ import AVFoundation
       task.setTaskCompleted(success: false)
     }
     
-    // Usar el canal existente para solicitar que Flutter ejecute el servicio de fondo
-    guard let controller = window?.rootViewController as? FlutterViewController else {
+    // Obtener el controller sin acceder a window.rootViewController directamente en segundo plano
+    let controller: FlutterViewController?
+    if Thread.isMainThread {
+      controller = window?.rootViewController as? FlutterViewController
+    } else {
+      // En hilo secundario, debemos realizar la operación en el hilo principal
+      var tempController: FlutterViewController?
+      DispatchQueue.main.sync {
+        tempController = window?.rootViewController as? FlutterViewController
+      }
+      controller = tempController
+    }
+    
+    guard let flutterController = controller else {
       print("ERROR: No se pudo obtener el controlador Flutter para BGTask")
       taskTimer.invalidate()
       task.setTaskCompleted(success: false)
@@ -342,12 +354,11 @@ import AVFoundation
     // Usar el canal existente
     let methodChannel = FlutterMethodChannel(
       name: "com.alerta.telegram/background_tasks",
-      binaryMessenger: controller.binaryMessenger
+      binaryMessenger: flutterController.binaryMessenger
     )
     
-    // Asegurarnos de registrar los plugins directamente
-    print("Registrando plugins para el contexto de ejecución en segundo plano")
-    GeneratedPluginRegistrant.register(with: controller)
+    // No registramos plugins aquí, ya deberían estar registrados
+    print("Usando plugins ya registrados para el contexto de ejecución en segundo plano")
     
     // Llamar a Flutter para que ejecute el servicio en segundo plano
     methodChannel.invokeMethod("startBackgroundFetch", arguments: ["taskId": identifier]) { result in

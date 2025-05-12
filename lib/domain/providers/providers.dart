@@ -3,6 +3,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:flutter/foundation.dart';
 import 'dart:io' show Platform;
+import 'dart:async';
 
 import '../../config.dart' as app_config;
 import '../../core/services/audio_service.dart';
@@ -414,12 +415,100 @@ class AlertStatusNotifier extends StateNotifier<AlertStatus> {
           isActive: false,
           statusMessage: 'Alerta desactivada',
         );
+
+        // MEJORA CRÍTICA: temporizador de seguridad para iOS
+        // Si estamos en iOS, añadimos un temporizador para verificar si la alerta sigue activa
+        // después de un tiempo y forzar una segunda detención si es necesario
+        if (Platform.isIOS) {
+          Timer(const Duration(seconds: 5), () {
+            // Verificar nuevamente con el servicio si la alerta sigue activa
+            final isStillActive = backgroundService.isAlertActive;
+            if (isStillActive) {
+              print(
+                '⚠️ Alerta todavía activa después de 5 segundos, forzando una segunda detención',
+              );
+              // Intentar detener nuevamente y actualizar el estado
+              backgroundService.stopAlert().then((secondSuccess) {
+                if (secondSuccess) {
+                  print('✅ Segunda detención exitosa');
+                  state = state.copyWith(
+                    isActive: false,
+                    statusMessage: 'Alerta desactivada (segunda verificación)',
+                  );
+                }
+              });
+            } else {
+              print(
+                '✅ Alerta correctamente desactivada, verificación de seguridad',
+              );
+            }
+          });
+        }
       }
 
       return success;
     } catch (e) {
       state = state.copyWith(statusMessage: 'Error al detener alerta: $e');
       return false;
+    }
+  }
+
+  // Método para forzar la detención de la alerta
+  // Esto es útil cuando los métodos normales de detención fallan
+  Future<void> forceStopAlert() async {
+    print('Forzando detención de alerta desde UI');
+
+    try {
+      // Marcar como inactiva en el estado inmediatamente
+      state = state.copyWith(
+        isActive: false,
+        statusMessage: 'Alerta forzada a detenerse',
+      );
+
+      // Obtener servicio de fondo
+      final backgroundService = _ref.read(backgroundServiceProvider);
+
+      // Primer intento: llamada normal a stopAlert
+      print('Primer intento de detención forzada - método normal');
+      await backgroundService.stopAlert();
+
+      // Segundo intento: múltiples llamadas a stopAlert
+      print('Segundo intento - múltiples llamadas a stopAlert');
+      try {
+        await backgroundService.stopAlert();
+        print('Segunda llamada a stopAlert completada');
+
+        await Future.delayed(Duration(milliseconds: 500));
+        await backgroundService.stopAlert();
+        print('Tercera llamada a stopAlert completada');
+      } catch (e) {
+        print('Error en llamadas múltiples: $e');
+      }
+
+      // Específico para iOS: intentar obtener y liberar recursos
+      if (Platform.isIOS) {
+        print('iOS: Forzando limpieza adicional de recursos');
+        try {
+          // Notificar al sistema para liberar recursos
+          final audioService = AudioService();
+          await audioService.dispose();
+          print('Recursos de audio liberados forzosamente');
+        } catch (e) {
+          print('Error al liberar recursos de audio: $e');
+        }
+      }
+
+      print('Alerta marcada como inactiva forzosamente');
+
+      // Actualizar estado una vez más para confirmar
+      await Future.delayed(Duration(seconds: 1));
+      state = state.copyWith(
+        isActive: false,
+        statusMessage: 'Alerta detenida forzosamente',
+      );
+    } catch (e) {
+      print('Error al forzar detención: $e');
+      state = state.copyWith(statusMessage: 'Error al forzar detención: $e');
     }
   }
 

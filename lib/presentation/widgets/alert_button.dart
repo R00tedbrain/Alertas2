@@ -1,9 +1,12 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:flutter/foundation.dart';
 
 import '../../domain/providers/providers.dart';
 import '../../core/services/permission_service.dart';
+import '../../core/services/background_service.dart';
 
 class AlertButton extends ConsumerWidget {
   const AlertButton({super.key});
@@ -203,18 +206,192 @@ class AlertButton extends ConsumerWidget {
                   final success = await alertNotifier.stopAlert();
 
                   if (!success) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Error al detener la alerta'),
-                        backgroundColor: Colors.red,
-                      ),
-                    );
+                    _showForceStopDialog(context, ref);
+                  } else {
+                    // Programar una verificación después de un tiempo
+                    // para asegurar que la alerta realmente se ha detenido
+                    Future.delayed(const Duration(seconds: 8), () {
+                      final isStillActive =
+                          ref.read(alertStatusProvider).isActive;
+                      if (isStillActive) {
+                        _showForceStopDialog(context, ref);
+                      }
+                    });
                   }
                 },
                 child: const Text(
                   'Detener',
                   style: TextStyle(color: Colors.red),
                 ),
+              ),
+            ],
+          ),
+    );
+  }
+
+  // Diálogo para manejar un fallo en la detención de la alerta
+  void _showForceStopDialog(BuildContext context, WidgetRef ref) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder:
+          (context) => AlertDialog(
+            title: const Text('Problema al detener alerta'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.error_outline, size: 48, color: Colors.red),
+                SizedBox(height: 16),
+                Text(
+                  'No se pudo detener la alerta correctamente. '
+                  'Los mensajes podrían seguir enviándose. '
+                  'Por favor, seleccione una acción:',
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Esperar'),
+              ),
+              ElevatedButton(
+                onPressed: () {
+                  Navigator.pop(context);
+                  // Intentar detener otra vez con el servicio directamente
+                  final backgroundService = ref.read(backgroundServiceProvider);
+                  backgroundService.stopAlert();
+
+                  // Forzar el estado a inactivo en el provider
+                  final alertNotifier = ref.read(alertStatusProvider.notifier);
+                  alertNotifier.forceStopAlert();
+
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Alerta forzada a detenerse'),
+                      backgroundColor: Colors.orange,
+                    ),
+                  );
+
+                  // Mostrar un segundo diálogo después de un breve retraso
+                  // para verificar si la detención fue exitosa
+                  Future.delayed(Duration(seconds: 3), () {
+                    final isStillActive =
+                        ref.read(alertStatusProvider).isActive;
+                    if (isStillActive) {
+                      _showEmergencyOptionsDialog(context, ref);
+                    }
+                  });
+                },
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
+                child: const Text('Forzar detención'),
+              ),
+              if (Platform.isIOS)
+                ElevatedButton(
+                  onPressed: () {
+                    Navigator.pop(context);
+                    _showEmergencyOptionsDialog(context, ref);
+                  },
+                  style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                  child: const Text('Opciones de emergencia'),
+                ),
+            ],
+          ),
+    );
+  }
+
+  // Diálogo con opciones extremas para casos donde la detención normal falla
+  void _showEmergencyOptionsDialog(BuildContext context, WidgetRef ref) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder:
+          (context) => AlertDialog(
+            title: const Text('Opciones de emergencia'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.warning_amber_rounded, size: 48, color: Colors.red),
+                SizedBox(height: 16),
+                Text(
+                  'La aplicación sigue enviando mensajes. '
+                  'Estas son opciones más agresivas:',
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  Navigator.pop(context);
+                },
+                child: const Text('Cancelar'),
+              ),
+              ElevatedButton(
+                onPressed: () {
+                  Navigator.pop(context);
+
+                  // Detención forzada extrema
+                  final alertNotifier = ref.read(alertStatusProvider.notifier);
+                  alertNotifier.forceStopAlert().then((_) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Detención forzada extrema activada'),
+                        backgroundColor: Colors.red,
+                        duration: Duration(seconds: 5),
+                      ),
+                    );
+                  });
+                },
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                child: const Text('Forzar detención extrema'),
+              ),
+              ElevatedButton(
+                onPressed: () {
+                  Navigator.pop(context);
+
+                  // Forzar detención y mostrar instrucciones para cerrar la app
+                  final alertNotifier = ref.read(alertStatusProvider.notifier);
+                  alertNotifier.forceStopAlert().then((_) {
+                    showDialog(
+                      context: context,
+                      barrierDismissible: false,
+                      builder:
+                          (context) => AlertDialog(
+                            title: const Text('Cierre manual requerido'),
+                            content: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.exit_to_app,
+                                  size: 48,
+                                  color: Colors.red,
+                                ),
+                                SizedBox(height: 16),
+                                Text(
+                                  'Por favor, cierre completamente la aplicación ahora:\n\n'
+                                  '1. Deslice hacia arriba desde la parte inferior\n'
+                                  '2. Deslice la app hacia arriba para cerrarla\n'
+                                  '3. Vuelva a abrir la aplicación\n\n'
+                                  'Esto es necesario para detener completamente los envíos.',
+                                  textAlign: TextAlign.left,
+                                ),
+                              ],
+                            ),
+                            actions: [
+                              TextButton(
+                                onPressed: () => Navigator.pop(context),
+                                child: const Text('Entendido'),
+                              ),
+                            ],
+                          ),
+                    );
+                  });
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.deepPurple,
+                ),
+                child: const Text('Instrucciones de cierre'),
               ),
             ],
           ),
