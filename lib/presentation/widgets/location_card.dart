@@ -1,11 +1,30 @@
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:intl/intl.dart';
+import 'dart:io';
+import 'package:url_launcher/url_launcher.dart';
 
 class LocationCard extends StatelessWidget {
   final Position position;
 
-  const LocationCard({Key? key, required this.position}) : super(key: key);
+  const LocationCard({super.key, required this.position});
+
+  // Método para abrir el navegador con la ubicación en Google Maps
+  Future<void> _openMap(double latitude, double longitude) async {
+    final url =
+        'https://www.google.com/maps/search/?api=1&query=$latitude,$longitude';
+
+    try {
+      final Uri uri = Uri.parse(url);
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      } else {
+        print('No se pudo abrir el mapa: $url');
+      }
+    } catch (e) {
+      print('Error al abrir el mapa: $e');
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -46,7 +65,7 @@ class LocationCard extends StatelessWidget {
               'Hora',
               DateFormat('HH:mm:ss').format(
                 DateTime.fromMillisecondsSinceEpoch(
-                  position.timestamp?.millisecondsSinceEpoch ?? 0,
+                  position.timestamp.millisecondsSinceEpoch ?? 0,
                 ),
               ),
             ),
@@ -54,7 +73,8 @@ class LocationCard extends StatelessWidget {
             Align(
               alignment: Alignment.center,
               child: ElevatedButton.icon(
-                onPressed: () {},
+                onPressed:
+                    () => _openMap(position.latitude, position.longitude),
                 icon: const Icon(Icons.map),
                 label: const Text('Ver en mapa'),
                 style: ElevatedButton.styleFrom(

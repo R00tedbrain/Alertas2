@@ -1198,6 +1198,14 @@ class BackgroundAlertService {
         }
       }
 
+      // CRÍTICO: Enviar evento stopService para cancelar los timers
+      print('Enviando evento stopService para cancelar timers');
+      service.invoke('stopService', {
+        'reason': 'alert_stopped',
+        'timestamp': DateTime.now().millisecondsSinceEpoch,
+      });
+
+      // Actualizar el estado del servicio
       service.invoke('updateStatus', {
         'status': 'Alerta detenida',
         'isActive': false,
