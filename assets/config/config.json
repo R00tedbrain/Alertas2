@@ -1,0 +1,18 @@
+{
+  "telegram_bot_token": "TU_TOKEN_AQUI",
+  "emergency_contacts": [
+    {
+      "name": "Contacto de Emergencia 1",
+      "chat_id": "12345678"
+    },
+    {
+      "name": "Contacto de Emergencia 2",
+      "chat_id": "87654321"
+    }
+  ],
+  "alert_settings": {
+    "location_update_interval_seconds": 60,
+    "audio_recording_duration_seconds": 30,
+    "audio_recording_interval_seconds": 30
+  }
+} 

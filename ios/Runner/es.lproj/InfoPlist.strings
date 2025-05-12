@@ -1,0 +1,26 @@
+/* 
+  InfoPlist.strings
+  Runner
+  
+  Descripciones localizadas para los permisos de iOS
+*/
+
+// Permisos de ubicación
+"NSLocationWhenInUseUsageDescription" = "Tu ubicación es necesaria para enviar actualizaciones en tiempo real a tus contactos de emergencia en caso de necesidad.";
+"NSLocationAlwaysAndWhenInUseUsageDescription" = "Tu ubicación en segundo plano es necesaria para proporcionar actualizaciones de ubicación continuas a tus contactos de emergencia durante una alerta activa, incluso cuando la aplicación está cerrada.";
+"NSLocationAlwaysUsageDescription" = "El seguimiento continuo de ubicación es necesario para enviar actualizaciones regulares a tus contactos de emergencia durante una situación de emergencia.";
+
+// Permiso de micrófono
+"NSMicrophoneUsageDescription" = "El acceso al micrófono es necesario para grabar clips de audio que se enviarán a tus contactos de emergencia durante una alerta.";
+
+// Explicaciones del modo en segundo plano
+"UIBackgroundModes" = "La aplicación necesita continuar enviando ubicación y audio a los contactos de emergencia incluso cuando no estás usando activamente tu teléfono.";
+
+// Notificaciones locales
+"NSUserNotificationUsageDescription" = "Las notificaciones se utilizan para informarte sobre el estado de las alertas de emergencia que se envían a tus contactos.";
+
+// Acceso a Internet
+"NSAppTransportSecurity" = "Se requiere conexión a Internet para enviar alertas a tus contactos de emergencia a través de Telegram.";
+
+// Biblioteca de fotos (en caso de que la aplicación necesite guardar grabaciones de audio)
+"NSPhotoLibraryUsageDescription" = "El acceso a la biblioteca de fotos es necesario para guardar grabaciones de audio que se enviarán a los contactos de emergencia."; 

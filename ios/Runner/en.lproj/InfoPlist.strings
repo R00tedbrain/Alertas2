@@ -1,0 +1,26 @@
+/* 
+  InfoPlist.strings
+  Runner
+  
+  Localized descriptions for iOS permissions
+*/
+
+// Location permissions
+"NSLocationWhenInUseUsageDescription" = "Your location is needed to send real-time updates to your emergency contacts in case of an emergency.";
+"NSLocationAlwaysAndWhenInUseUsageDescription" = "Your background location is required to continuously provide location updates to emergency contacts during an active alert, even when the app is closed.";
+"NSLocationAlwaysUsageDescription" = "Continuous location tracking is required to send regular updates to your emergency contacts during an emergency situation.";
+
+// Microphone permission
+"NSMicrophoneUsageDescription" = "Microphone access is needed to record audio clips that will be sent to your emergency contacts during an alert.";
+
+// Background mode explanations
+"UIBackgroundModes" = "The app needs to continue sending location and audio to emergency contacts even when not actively using your phone.";
+
+// Local notifications
+"NSUserNotificationUsageDescription" = "Notifications are used to inform you about the status of emergency alerts being sent to your contacts.";
+
+// Internet access
+"NSAppTransportSecurity" = "Internet connection is required to send alerts to your emergency contacts via Telegram.";
+
+// Photo Library (in case app needs to save audio recordings)
+"NSPhotoLibraryUsageDescription" = "Access to photo library is needed to save audio recordings that will be sent to emergency contacts."; 
