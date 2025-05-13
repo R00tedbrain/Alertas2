@@ -53,6 +53,44 @@ class AudioService {
       _tempPath = directory.path;
       _logger.d('Directorio temporal: $_tempPath');
 
+      // En iOS, verificar que el directorio existe y es accesible
+      if (Platform.isIOS) {
+        final dir = Directory(_tempPath!);
+        if (!await dir.exists()) {
+          _logger.e('El directorio temporal no existe: $_tempPath');
+          try {
+            await dir.create(recursive: true);
+            _logger.d('Directorio temporal creado');
+          } catch (e) {
+            _logger.e('Error al crear directorio temporal: $e');
+            throw Exception('No se pudo crear el directorio temporal: $e');
+          }
+        }
+
+        // Verificar permisos de escritura intentando crear un archivo de prueba
+        try {
+          final testFile = File('$_tempPath/test_audio_permissions.tmp');
+          await testFile.writeAsString('test');
+          await testFile.delete();
+          _logger.d('Permisos de escritura verificados en directorio temporal');
+        } catch (e) {
+          _logger.e('Error al verificar permisos de escritura: $e');
+          // Intentar usar un directorio alternativo
+          try {
+            final docsDir = await getApplicationDocumentsDirectory();
+            _tempPath = docsDir.path;
+            _logger.d(
+              'Usando directorio de documentos como alternativa: $_tempPath',
+            );
+          } catch (e2) {
+            _logger.e('Error al obtener directorio alternativo: $e2');
+            throw Exception(
+              'No se pudo acceder a un directorio de escritura: $e, $e2',
+            );
+          }
+        }
+      }
+
       // Configurar la sesión de audio antes de crear el grabador
       await _setupAudioSession();
 
@@ -88,120 +126,39 @@ class AudioService {
   /// Configurar la sesión de audio (especialmente importante para iOS)
   Future<void> _setupAudioSession() async {
     try {
-      _logger.d('Configurando sesión de audio para iOS');
+      _logger.d('Configurando sesión de audio básica');
 
       // Obtener la instancia singleton de AudioSession
       _audioSession = await AudioSession.instance;
 
-      // En iOS, usar el canal nativo para configurar la sesión de audio
-      if (Platform.isIOS) {
-        try {
-          // Intentar configurar la sesión de audio a través del canal nativo
-          const MethodChannel channel = MethodChannel(
-            'com.alerta.telegram/background_tasks',
-          );
-          final bool? result = await channel.invokeMethod<bool>(
-            'configureAudioSession',
-          );
-
-          if (result == true) {
-            _logger.d('Sesión de audio configurada a través del canal nativo');
-            // Esperar un momento para que la configuración surta efecto
-            await Future.delayed(const Duration(milliseconds: 300));
-          } else {
-            _logger.w(
-              'No se pudo configurar la sesión de audio a través del canal nativo',
-            );
-            // Continuar con el enfoque basado en audio_session
-          }
-        } catch (e) {
-          _logger.w('Error al configurar sesión a través del canal nativo: $e');
-          // Continuar con el enfoque basado en audio_session
-        }
-      }
-
-      // Configurar la sesión con parámetros optimizados para grabación
+      // Usar una configuración muy básica
       await _audioSession!.configure(
         AudioSessionConfiguration(
           avAudioSessionCategory: AVAudioSessionCategory.playAndRecord,
           avAudioSessionCategoryOptions:
-              AVAudioSessionCategoryOptions.allowBluetooth |
-              AVAudioSessionCategoryOptions.defaultToSpeaker,
-          avAudioSessionMode: AVAudioSessionMode.spokenAudio,
-          avAudioSessionRouteSharingPolicy:
-              AVAudioSessionRouteSharingPolicy.defaultPolicy,
-          avAudioSessionSetActiveOptions: AVAudioSessionSetActiveOptions.none,
+              AVAudioSessionCategoryOptions.defaultToSpeaker |
+              AVAudioSessionCategoryOptions.allowBluetooth,
+          avAudioSessionMode: AVAudioSessionMode.defaultMode,
           androidAudioAttributes: const AndroidAudioAttributes(
             contentType: AndroidAudioContentType.speech,
             flags: AndroidAudioFlags.none,
             usage: AndroidAudioUsage.voiceCommunication,
           ),
           androidAudioFocusGainType: AndroidAudioFocusGainType.gain,
-          androidWillPauseWhenDucked: true,
         ),
       );
-      _logger.d('Sesión de audio configurada');
 
-      // Activar la sesión de audio ahora
-      if (Platform.isIOS) {
-        try {
-          // Intentar activar a través del canal nativo primero
-          const MethodChannel channel = MethodChannel(
-            'com.alerta.telegram/background_tasks',
-          );
-          final bool? activationResult = await channel.invokeMethod<bool>(
-            'activateAudioSession',
-          );
+      _logger.d('Sesión de audio configurada con parámetros básicos');
 
-          if (activationResult == true) {
-            _logger.d('Sesión de audio activada a través del canal nativo');
-          } else {
-            _logger.w(
-              'No se pudo activar a través del canal nativo, usando audio_session',
-            );
-            await Future.delayed(const Duration(milliseconds: 200));
-            final result = await _audioSession!.setActive(true);
-            if (result) {
-              _logger.d(
-                'Sesión de audio activada correctamente a través de audio_session',
-              );
-            } else {
-              _logger.w(
-                'No se pudo activar la sesión de audio a través de audio_session',
-              );
-            }
-          }
-        } catch (e) {
-          _logger.w('Error al activar a través del canal nativo: $e');
-          // Intentar activar a través de audio_session
-          await Future.delayed(const Duration(milliseconds: 200));
-          final result = await _audioSession!.setActive(true);
-          if (result) {
-            _logger.d(
-              'Sesión de audio activada correctamente a través de audio_session',
-            );
-          } else {
-            _logger.w(
-              'No se pudo activar la sesión de audio a través de audio_session',
-            );
-          }
-        }
-      } else {
-        // Para Android, usar audio_session directamente
-        await Future.delayed(const Duration(milliseconds: 200));
-        final result = await _audioSession!.setActive(true);
-        if (result) {
-          _logger.d('Sesión de audio activada correctamente');
-        } else {
-          _logger.w('No se pudo activar la sesión de audio');
-        }
-      }
+      // Activar la sesión
+      await _audioSession!.setActive(true);
+      _logger.d('Sesión de audio activada');
 
       // Configurar manejo de interrupciones
       _setupInterruptionHandling();
     } catch (e) {
       _logger.e('Error al configurar sesión de audio: $e');
-      throw e;
+      // Continuar incluso con error
     }
   }
 
@@ -257,21 +214,91 @@ class AudioService {
           _logger.d(
             'Reintentando inicialización del grabador (intento ${attempts + 1}/$_maxRetries)',
           );
-          await Future.delayed(_retryDelay);
+          // Aumentar el tiempo de espera para iOS
+          if (Platform.isIOS) {
+            await Future.delayed(
+              Duration(milliseconds: _retryDelay.inMilliseconds * 2),
+            );
+          } else {
+            await Future.delayed(_retryDelay);
+          }
 
           // Recrear el grabador para el reintento
-          _recorder?.closeRecorder().catchError(
-            (e) => _logger.w('Error al cerrar grabador: $e'),
-          );
-          await Future.delayed(const Duration(milliseconds: 300));
+          if (_recorder != null) {
+            try {
+              if (_recorder!.isRecording) {
+                await _recorder!.stopRecorder();
+              }
+              await _recorder!.closeRecorder();
+            } catch (closeError) {
+              _logger.w('Error al cerrar grabador para reintento: $closeError');
+            }
+            _recorder = null;
+
+            // En iOS, esperar más tiempo después de cerrar el grabador
+            if (Platform.isIOS) {
+              await Future.delayed(const Duration(seconds: 1));
+            } else {
+              await Future.delayed(const Duration(milliseconds: 300));
+            }
+          }
+        }
+
+        // Verificar que la sesión de audio está activa antes de crear el grabador
+        if (Platform.isIOS && _audioSession != null) {
+          try {
+            final isActive = await _audioSession!.setActive(true);
+            if (!isActive) {
+              _logger.w(
+                'No se pudo activar la sesión de audio antes de crear grabador',
+              );
+              // Intentar forzar la activación
+              await Future.delayed(const Duration(milliseconds: 500));
+              await _audioSession!.setActive(
+                true,
+                avAudioSessionSetActiveOptions:
+                    AVAudioSessionSetActiveOptions.notifyOthersOnDeactivation,
+              );
+            }
+          } catch (e) {
+            _logger.w('Error al activar sesión de audio para grabador: $e');
+          }
         }
 
         // Crear nueva instancia del grabador con nivel de log bajo
         _recorder = FlutterSoundRecorder(logLevel: Level.nothing);
 
+        // En iOS, hacer una pausa antes de abrir el grabador
+        if (Platform.isIOS) {
+          await Future.delayed(const Duration(milliseconds: 300));
+        }
+
         // Abrir el grabador
         await _recorder!.openRecorder();
         _logger.d('Grabador abierto correctamente');
+
+        // En iOS, verificar explícitamente que el grabador está listo
+        if (Platform.isIOS) {
+          try {
+            // Verificar que el grabador está listo haciendo una prueba sencilla
+            _logger.d(
+              'Verificando que el grabador esté realmente listo en iOS',
+            );
+            final isRecorderReady =
+                _recorder != null && !_recorder!.isRecording;
+
+            if (!isRecorderReady) {
+              _logger.e('El grabador no está listo para usar');
+              throw Exception('El grabador no está listo para usar');
+            }
+
+            // Esperar un momento adicional para estabilizar el grabador en iOS
+            await Future.delayed(const Duration(milliseconds: 300));
+          } catch (e) {
+            _logger.e('Error al verificar el estado del grabador: $e');
+            throw e;
+          }
+        }
 
         // Si llegamos aquí, la inicialización fue exitosa
         return;
@@ -282,6 +309,31 @@ class AudioService {
         attempts++;
 
         if (attempts >= _maxRetries) {
+          // En iOS, intentar un enfoque alternativo en el último intento
+          if (Platform.isIOS && attempts == _maxRetries) {
+            _logger.d(
+              'Intentando enfoque alternativo para iOS como último recurso',
+            );
+            try {
+              // Desactivar completamente la sesión de audio y volver a activarla
+              if (_audioSession != null) {
+                await _audioSession!.setActive(false);
+                await Future.delayed(const Duration(seconds: 2));
+                await _audioSession!.setActive(true);
+              }
+
+              // Recrear el grabador con opciones mínimas
+              _recorder = FlutterSoundRecorder(logLevel: Level.nothing);
+              await Future.delayed(const Duration(seconds: 1));
+              await _recorder!.openRecorder();
+
+              _logger.d('Grabador inicializado con enfoque alternativo');
+              return;
+            } catch (finalError) {
+              _logger.e('Error en intento final alternativo: $finalError');
+            }
+          }
+
           throw Exception(
             'No se pudo inicializar el grabador después de $_maxRetries intentos: $e',
           );
@@ -310,53 +362,118 @@ class AudioService {
     }
 
     try {
-      // En iOS, asegurarse de que la sesión de audio está activa
+      // Crear nombre de archivo único con prefijo descriptivo
+      final DateTime now = DateTime.now();
+      final String fileName = 'alert_audio_${now.millisecondsSinceEpoch}.aac';
+
+      // Para iOS, asegurar que usamos el directorio de documentos que es más persistente
+      String filePath;
       if (Platform.isIOS) {
+        final Directory documentsDir = await getApplicationDocumentsDirectory();
+        filePath = '${documentsDir.path}/$fileName';
+
         try {
-          if (_audioSession != null) {
-            await _audioSession!.setActive(true);
+          _logger.d('iOS: Configurando sesión de audio para grabación...');
+          // Preparar la sesión de audio a través del canal nativo
+          const MethodChannel channel = MethodChannel(
+            'com.alerta.telegram/background_tasks',
+          );
+
+          // Primero detener cualquier engine actual
+          try {
+            await channel.invokeMethod('stopAudioEngine');
+            await Future.delayed(const Duration(milliseconds: 500));
+          } catch (e) {
+            _logger.w('Error al detener motor de audio: $e');
+          }
+
+          // Usar el método específico para preparar grabación
+          try {
+            await channel.invokeMethod('prepareForRecording');
+            await Future.delayed(const Duration(milliseconds: 800));
+            _logger.d('Sesión de audio preparada para grabación');
+          } catch (e) {
+            _logger.w('Error al preparar sesión para grabación: $e');
+            // Intentar fallback
+            try {
+              await channel.invokeMethod('configureAudioSession');
+              await Future.delayed(const Duration(milliseconds: 500));
+              _logger.d('Sesión de audio configurada con método alternativo');
+            } catch (e2) {
+              _logger.w('Error en método alternativo: $e2');
+              // Continuar con flutter_sound directamente
+            }
           }
         } catch (e) {
-          _logger.w('Error al activar sesión de audio: $e');
+          _logger.w('Error al configurar sesión de audio en iOS: $e');
+          // Continuar incluso con error, flutter_sound intentará configurar la sesión
         }
+      } else {
+        // Para Android, usar storage externo que es más persistente
+        final Directory appDir = await getApplicationDocumentsDirectory();
+        filePath = '${appDir.path}/$fileName';
       }
-
-      // Crear nombre de archivo único
-      final DateTime now = DateTime.now();
-      final String fileName = 'audio_${now.millisecondsSinceEpoch}.aac';
-      final String filePath = '$_tempPath/$fileName';
 
       _logger.d('Iniciando grabación en: $filePath');
 
-      // Ajustar duración para iOS si es necesario
-      final adjustedDuration =
-          Platform.isIOS && durationInSeconds > 20
-              ? 20 // máximo 20 segundos en iOS para evitar problemas
-              : durationInSeconds;
-
-      // Iniciar grabación
-      await _recorder!.startRecorder(toFile: filePath, codec: Codec.aacADTS);
-
-      // Esperar tiempo de grabación
-      await Future.delayed(Duration(seconds: adjustedDuration));
-
-      // Detener grabación
-      final path = await _recorder!.stopRecorder();
-      _logger.d('Grabación completada: $path');
-
-      return path;
-    } catch (e) {
-      _logger.e('Error al grabar audio: $e');
-
-      // Intentar recuperarse del error
-      try {
-        if (_recorder != null && _recorder!.isRecording) {
-          await _recorder!.stopRecorder();
-        }
-      } catch (stopError) {
-        _logger.e('Error adicional al detener grabación: $stopError');
+      // Verificar que el grabador está listo
+      if (_recorder == null || _recorder!.isStopped == false) {
+        _logger.w('Grabador no está listo, intentando reinicializar');
+        await _initializeRecorder();
+        await Future.delayed(const Duration(milliseconds: 500));
       }
 
+      // Configurar el codificador y bitrate apropiados para AAC
+      const sampleRate = 44100;
+      const numChannels = 1; // Mono para mejor calidad de voz
+      const bitRate = 96000; // Mayor bitrate para mejor calidad
+
+      // Iniciar grabación con parámetros optimizados
+      await _recorder!.startRecorder(
+        toFile: filePath,
+        codec: Codec.aacADTS,
+        audioSource: AudioSource.microphone,
+        sampleRate: sampleRate,
+        numChannels: numChannels,
+        bitRate: bitRate,
+      );
+
+      _logger.d('Grabando audio durante $durationInSeconds segundos');
+
+      // Esperar a que termine la grabación después del tiempo especificado
+      await Future.delayed(Duration(seconds: durationInSeconds));
+
+      if (_recorder!.isRecording) {
+        if (Platform.isIOS) {
+          _logger.d('Grabando audio en segundo plano para iOS...');
+        }
+        // Detener la grabación
+        String? path = await _recorder!.stopRecorder();
+        _logger.d('Grabación completada: $path');
+
+        // Verificar que el archivo existe y tiene tamaño adecuado
+        final File audioFile = File(filePath);
+        if (!await audioFile.exists()) {
+          _logger.e('⛔ El archivo de audio no existe: $filePath');
+          return null;
+        }
+
+        final int fileSize = await audioFile.length();
+        _logger.d('Tamaño del archivo de audio: $fileSize bytes');
+
+        if (fileSize < 1000) {
+          // Menos de 1KB probablemente indica un error
+          _logger.e('⛔ El archivo de audio es muy pequeño: $fileSize bytes');
+          return null;
+        }
+
+        return filePath;
+      } else {
+        _logger.e('⛔ La grabación se detuvo prematuramente');
+        return null;
+      }
+    } catch (e) {
+      _logger.e('⛔ Error al grabar audio: $e');
       return null;
     }
   }

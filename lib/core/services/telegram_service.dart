@@ -439,12 +439,30 @@ class TelegramService {
       return false;
     }
 
-    print('Tamaño del archivo: ${await file.length()} bytes');
+    // Verificar adicionalmente el tamaño del archivo
+    final fileSize = await file.length();
+    print('Tamaño del archivo: $fileSize bytes');
+
+    if (fileSize <= 0) {
+      print('ERROR: El archivo de audio está vacío (0 bytes)');
+      _logger.e('Archivo de audio vacío: $filePath');
+      return false;
+    }
 
     return _withRetry<bool>(() async {
       try {
         print('Enviando audio a chat $chatId');
         print('Ruta del archivo: $filePath');
+
+        // Verificar nuevamente que el archivo existe justo antes de enviarlo
+        // (puede haber sido eliminado por el sistema entre la verificación inicial y ahora)
+        if (!await file.exists()) {
+          print(
+            'ERROR: El archivo dejó de existir antes de enviarlo: $filePath',
+          );
+          _logger.e('El archivo dejó de existir: $filePath');
+          throw Exception('El archivo dejó de existir durante el envío');
+        }
 
         // Preparar datos
         final formData = FormData.fromMap({

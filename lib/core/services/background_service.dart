@@ -1035,6 +1035,50 @@ class BackgroundAlertService {
           if (audioPath != null) {
             _log('Audio grabado en: $audioPath');
 
+            // Verificar que el archivo realmente existe
+            final audioFile = File(audioPath);
+            if (!await audioFile.exists()) {
+              _log(
+                '⚠️ El archivo de audio no existe a pesar del path válido: $audioPath',
+              );
+
+              // Intentar enviar mensaje informando del problema
+              try {
+                await telegramService.sendMessageToAllContacts(
+                  contacts,
+                  '⚠️ Se intentó grabar audio pero el archivo no está accesible. Se intentará nuevamente más tarde.',
+                  markdown: false,
+                );
+                _log('Mensaje de advertencia enviado');
+              } catch (e) {
+                _log('Error al enviar mensaje de advertencia: $e');
+              }
+
+              return;
+            }
+
+            // Verificar tamaño del archivo
+            final fileSize = await audioFile.length();
+            _log('Tamaño del archivo de audio: $fileSize bytes');
+
+            if (fileSize <= 0) {
+              _log('⚠️ El archivo de audio está vacío (0 bytes): $audioPath');
+
+              // Intentar enviar mensaje informando del problema
+              try {
+                await telegramService.sendMessageToAllContacts(
+                  contacts,
+                  '⚠️ Se grabó audio pero el archivo resultó vacío. Se intentará nuevamente más tarde.',
+                  markdown: false,
+                );
+                _log('Mensaje de advertencia enviado');
+              } catch (e) {
+                _log('Error al enviar mensaje de advertencia: $e');
+              }
+
+              return;
+            }
+
             // Primero enviar mensaje informando que se enviará audio
             try {
               await telegramService.sendMessageToAllContacts(
@@ -1060,6 +1104,16 @@ class BackgroundAlertService {
               try {
                 audioRetries++;
                 _log('Intento $audioRetries de enviar audio');
+
+                // Verificar que el archivo aún existe antes de enviarlo
+                if (!await audioFile.exists()) {
+                  _log(
+                    '⚠️ El archivo dejó de existir antes del intento $audioRetries: $audioPath',
+                  );
+                  throw Exception(
+                    'El archivo dejó de existir durante el proceso de envío',
+                  );
+                }
 
                 await telegramService.sendAudioToAllContacts(
                   contacts,
