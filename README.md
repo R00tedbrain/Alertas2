@@ -141,3 +141,57 @@ MIT
 ## Contribuir
 
 Las contribuciones son bienvenidas. Por favor, abre un issue o envía un pull request para cualquier mejora.
+
+# Solución a problemas de segundo plano en iOS
+
+## Problema resuelto
+
+Se ha solucionado un error donde la grabación de audio en segundo plano dejó de funcionar después de implementar un URL Scheme. El error mostraba "MissingPluginException" para los métodos:
+
+1. `configureAudioSession` en audio_service.dart:175
+2. `activateAudioSession` en audio_service.dart:180
+3. `setupBackgroundTasks` en el canal nativo "com.alerta.telegram/background_tasks"
+
+## Cambios realizados
+
+### 1. AppDelegate.swift
+
+- Implementado correctamente el identificador de tarea para `flutter_background_service_ios`:
+  ```swift
+  SwiftFlutterBackgroundServicePlugin.taskIdentifier = "com.alerta.telegram.background.refresh"
+  ```
+
+- Configurada la sesión de audio correctamente
+
+- Implementado el método del canal nativo para manejar:
+  - `configureAudioSession`: Configura la sesión de audio desde Flutter
+  - `activateAudioSession`: Activa la sesión de audio desde Flutter
+  - `setupBackgroundTasks`: Confirma la configuración de tareas en segundo plano
+
+### 2. Info.plist
+
+- Actualizados los identificadores de BGTaskScheduler para que coincidan con los utilizados en el código:
+  ```xml
+  <key>BGTaskSchedulerPermittedIdentifiers</key>
+  <array>
+    <string>com.alerta.telegram.background.refresh</string>
+    <string>dev.flutter.background.refresh</string>
+  </array>
+  ```
+
+### 3. Runner-Bridging-Header.h
+
+- Simplificado para eliminar importaciones innecesarias, manteniendo solo:
+  ```objc
+  #import "GeneratedPluginRegistrant.h"
+  ```
+
+## Recomendaciones adicionales
+
+1. **Optimización de batería**: Para asegurar que la aplicación funcione correctamente en segundo plano en iOS, es crucial que los usuarios no tengan habilitada la optimización de batería para esta app.
+
+2. **Límites de iOS**: Tenga en cuenta que iOS tiene restricciones más estrictas para procesos en segundo plano que Android. Los procesos en segundo plano en iOS generalmente solo pueden ejecutarse durante 30 segundos antes de ser suspendidos.
+
+3. **Pruebas**: Realizar pruebas exhaustivas en dispositivos reales es fundamental para garantizar el correcto funcionamiento de las funciones de audio en segundo plano.
+
+4. **Actualizaciones del plugin**: Mantenerse actualizado con las últimas versiones de `flutter_background_service` y sus dependencias relacionadas.

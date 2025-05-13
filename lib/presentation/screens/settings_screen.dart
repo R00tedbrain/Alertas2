@@ -1,12 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../domain/providers/providers.dart';
 import '../../data/models/emergency_contact.dart';
 import '../../data/models/app_config.dart';
+import '../../core/constants/app_constants.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
-  const SettingsScreen({Key? key}) : super(key: key);
+  const SettingsScreen({super.key});
 
   @override
   _SettingsScreenState createState() => _SettingsScreenState();
@@ -64,6 +67,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
                 // Lista de contactos existentes
                 _buildContactsList(appConfig.emergencyContacts),
+
+                // Sección de URL Scheme
+                _buildURLSchemeSection(context),
               ],
             ),
           ),
@@ -347,6 +353,103 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       SnackBar(
         content: Text('Contacto ${contact.name} eliminado'),
         backgroundColor: Colors.blue,
+      ),
+    );
+  }
+
+  Widget _buildURLSchemeSection(BuildContext context) {
+    final urlScheme = "alertatelegram://iniciar";
+
+    return Card(
+      elevation: 4,
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Row(
+              children: [
+                Icon(Icons.link, color: Colors.blue),
+                SizedBox(width: 8),
+                Text(
+                  "URL Scheme para Atajos",
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              "Puedes usar el siguiente URL scheme para activar la alerta directamente desde la app Atajos de iOS:",
+              style: TextStyle(fontSize: 15),
+            ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.grey[200],
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      urlScheme,
+                      style: const TextStyle(
+                        fontFamily: 'monospace',
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.copy),
+                    onPressed: () {
+                      Clipboard.setData(ClipboardData(text: urlScheme));
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('URL copiado al portapapeles'),
+                          duration: Duration(seconds: 2),
+                        ),
+                      );
+                    },
+                    tooltip: "Copiar URL",
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              "Instrucciones para configurar un atajo:",
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              "1. Abre la app Atajos en tu iPhone\n"
+              "2. Crea un nuevo atajo\n"
+              "3. Añade la acción \"Abrir URL\"\n"
+              "4. Pega el URL scheme mostrado arriba\n"
+              "5. Guarda el atajo y colócalo en tu pantalla de inicio",
+            ),
+            const SizedBox(height: 16),
+            OutlinedButton.icon(
+              icon: const Icon(Icons.play_arrow),
+              label: const Text("Probar URL Scheme"),
+              onPressed: () async {
+                final uri = Uri.parse(urlScheme);
+                if (await canLaunchUrl(uri)) {
+                  await launchUrl(uri);
+                } else {
+                  // ignore: use_build_context_synchronously
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('No se pudo abrir el URL scheme'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                }
+              },
+            ),
+          ],
+        ),
       ),
     );
   }

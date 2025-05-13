@@ -21,7 +21,6 @@ class LocationService {
   Future<Position?> getCurrentLocation() async {
     try {
       // Comprobar si los servicios de ubicación están habilitados
-      print('Verificando si los servicios de ubicación están habilitados...');
       bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
       if (!serviceEnabled) {
         print('ERROR: Los servicios de ubicación están desactivados');
@@ -45,12 +44,9 @@ class LocationService {
           return null;
         }
       }
-      print('Servicios de ubicación habilitados: $serviceEnabled');
 
       // Verificar permisos
-      print('Verificando permisos de ubicación...');
       LocationPermission permission = await Geolocator.checkPermission();
-      print('Estado actual del permiso de ubicación: $permission');
 
       if (permission == LocationPermission.denied) {
         print('Permiso de ubicación denegado, solicitando permiso...');
@@ -87,28 +83,17 @@ class LocationService {
 
         // Verificamos si se concedió el permiso "always"
         permission = await Geolocator.checkPermission();
-        print(
-          'Nuevo estado del permiso después de solicitar always: $permission',
-        );
       }
-
-      // Obtener la ubicación actual con manejo específico para iOS
-      print('Intentando obtener la posición actual con alta precisión...');
 
       try {
         // Para iOS, se añade un manejo específico para los errores kCLErrorDomain
         if (Platform.isIOS) {
           // En iOS, primero intentamos con precisión baja para evitar timeout
-          print('iOS detectado: intentando primero con precisión baja...');
           try {
             final initialPosition = await Geolocator.getCurrentPosition(
               desiredAccuracy: LocationAccuracy.low,
               timeLimit: const Duration(seconds: 5),
             );
-
-            print('Posición inicial obtenida con baja precisión:');
-            print('  - Latitud: ${initialPosition.latitude}');
-            print('  - Longitud: ${initialPosition.longitude}');
 
             // Ahora intentamos con alta precisión
             try {
@@ -117,15 +102,10 @@ class LocationService {
                 timeLimit: const Duration(seconds: 10),
               );
 
-              print('Posición refinada con alta precisión:');
-              print('  - Latitud: ${highAccuracyPosition.latitude}');
-              print('  - Longitud: ${highAccuracyPosition.longitude}');
-
               return highAccuracyPosition;
             } catch (e) {
               // Si falla la alta precisión, usamos la posición inicial
               print('No se pudo obtener posición de alta precisión: $e');
-              print('Usando la posición de baja precisión...');
               return initialPosition;
             }
           } catch (e) {
@@ -139,12 +119,6 @@ class LocationService {
           desiredAccuracy: LocationAccuracy.high,
           timeLimit: const Duration(seconds: 10),
         );
-
-        print('Posición obtenida correctamente:');
-        print('  - Latitud: ${position.latitude}');
-        print('  - Longitud: ${position.longitude}');
-        print('  - Precisión: ${position.accuracy} metros');
-        print('  - Altitud: ${position.altitude} metros');
 
         return position;
       } on TimeoutException catch (e) {
@@ -186,9 +160,6 @@ class LocationService {
               desiredAccuracy: LocationAccuracy.low,
               timeLimit: const Duration(seconds: 5),
             );
-            print('Ubicación obtenida en el reintento:');
-            print('  - Latitud: ${retryPosition.latitude}');
-            print('  - Longitud: ${retryPosition.longitude}');
             return retryPosition;
           } catch (retryError) {
             print('Error en el reintento de ubicación: $retryError');
@@ -207,67 +178,37 @@ class LocationService {
 
   // Método específico para solicitar permisos de ubicación en iOS
   Future<void> _requestSpecificIOSLocationPermissions() async {
-    if (Platform.isIOS) {
-      print('Solicitando permisos específicos para iOS...');
+    if (!Platform.isIOS) return;
 
-      // Primero, verificamos el estado actual
-      LocationPermission currentStatus = await Geolocator.checkPermission();
-      print('Estado actual del permiso: $currentStatus');
+    // Para iOS, hay que solicitar permisos específicos
+    try {
+      final status = await Geolocator.checkPermission();
 
-      // iOS requiere primero 'whenInUse' antes de poder solicitar 'always'
-      if (currentStatus != LocationPermission.whileInUse &&
-          currentStatus != LocationPermission.always) {
-        print('Solicitando permiso mientras se usa (whenInUse)...');
-        final whileInUseStatus = await Geolocator.requestPermission();
-        print('Resultado de solicitud whenInUse: $whileInUseStatus');
-
-        // Si el usuario deniega este permiso, no podemos continuar
-        if (whileInUseStatus == LocationPermission.denied ||
-            whileInUseStatus == LocationPermission.deniedForever) {
-          print(
-            'El usuario denegó el permiso whenInUse, no se puede continuar',
-          );
-          return;
-        }
+      // Si no tenemos ningún permiso, solicitamos primero "while in use"
+      if (status == LocationPermission.denied) {
+        await Geolocator.requestPermission();
       }
 
-      // Si ya tenemos 'whileInUse', podemos solicitar 'always'
-      if (currentStatus == LocationPermission.whileInUse) {
-        print('Solicitando permiso de segundo plano (always)...');
-        print('NOTA: iOS mostrará un diálogo al usuario para este permiso');
-
-        try {
-          // En iOS, esto mostrará el diálogo de ubicación en segundo plano
-          await Geolocator.requestPermission();
-
-          // Verificamos el resultado
-          final newStatus = await Geolocator.checkPermission();
-          print(
-            'Nuevo estado del permiso después de solicitar always: $newStatus',
-          );
-        } catch (e) {
-          print('Error al solicitar permiso always: $e');
-        }
+      // Luego intentamos solicitar "always" si es posible
+      if (status == LocationPermission.whileInUse) {
+        await _requestBackgroundLocationPermission();
       }
+    } catch (e) {
+      print('Error al solicitar permisos específicos para iOS: $e');
     }
   }
 
-  // Método mejorado para solicitar permisos de ubicación en segundo plano
+  // Método específico para solicitar permisos en segundo plano
   Future<LocationPermission> _requestBackgroundLocationPermission() async {
     if (!Platform.isIOS) return await Geolocator.requestPermission();
 
-    print('Solicitando permisos de ubicación en segundo plano para iOS...');
-
     // Primero verificamos el estado actual
     LocationPermission currentStatus = await Geolocator.checkPermission();
-    print('Estado actual: $currentStatus');
 
     // En iOS, primero hay que tener "whenInUse" para luego solicitar "always"
     if (currentStatus != LocationPermission.whileInUse &&
         currentStatus != LocationPermission.always) {
-      print('Solicitando permiso whenInUse primero...');
       final whileInUseResult = await Geolocator.requestPermission();
-      print('Resultado whenInUse: $whileInUseResult');
 
       if (whileInUseResult != LocationPermission.whileInUse &&
           whileInUseResult != LocationPermission.always) {
@@ -277,7 +218,6 @@ class LocationService {
 
     // Si ya tenemos whenInUse, podemos solicitar always
     if (currentStatus == LocationPermission.whileInUse) {
-      print('Solicitando permiso always...');
       await Geolocator.requestPermission();
     }
 
@@ -287,8 +227,6 @@ class LocationService {
 
   // Suscribirse a cambios de ubicación
   Stream<Position> getLocationStream() {
-    print('Iniciando stream de ubicación...');
-
     // Primero verificamos los permisos antes de iniciar el stream
     _checkAndRequestLocationPermission();
 
@@ -302,19 +240,13 @@ class LocationService {
 
   // Verificar y solicitar permisos de ubicación
   Future<LocationPermission> _checkAndRequestLocationPermission() async {
-    print('Verificando permisos de ubicación para stream...');
-
     // Verificar si los servicios están habilitados
     bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
     if (!serviceEnabled) {
-      print('Servicios de ubicación deshabilitados, intentando habilitar...');
       try {
         await Geolocator.openLocationSettings();
         // Verificar nuevamente después de abrir configuración
         serviceEnabled = await Geolocator.isLocationServiceEnabled();
-        print(
-          'Servicios de ubicación después de abrir configuración: $serviceEnabled',
-        );
       } catch (e) {
         print('Error al abrir configuración de ubicación: $e');
       }
@@ -322,13 +254,10 @@ class LocationService {
 
     // Verificar permiso actual
     LocationPermission permission = await Geolocator.checkPermission();
-    print('Permiso actual: $permission');
 
     // Solicitar si es necesario
     if (permission == LocationPermission.denied) {
-      print('Solicitando permiso de ubicación...');
       permission = await Geolocator.requestPermission();
-      print('Nuevo estado de permiso: $permission');
     }
 
     return permission;

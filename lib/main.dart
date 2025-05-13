@@ -1,10 +1,57 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:uni_links/uni_links.dart';
+import 'dart:async';
+import 'dart:io';
+import 'dart:ui';
+import 'package:flutter/services.dart';
 
 import 'presentation/screens/home_screen.dart';
 import 'domain/providers/providers.dart';
 import 'core/constants/app_constants.dart';
+import 'core/services/background_service.dart';
+
+// Punto de entrada para tareas en segundo plano en iOS
+// Esta función es invocada por el motor headless
+@pragma('vm:entry-point')
+void _onIosBackground() {
+  try {
+    // El siguiente código es necesario para que Flutter sepa
+    // que estamos en un nuevo entorno aislado (isolate)
+    WidgetsFlutterBinding.ensureInitialized();
+    DartPluginRegistrant.ensureInitialized();
+
+    print('🔄 Motor headless iOS iniciado desde _onIosBackground');
+
+    // Configurar canal para comunicación con código nativo
+    const MethodChannel channel = MethodChannel(
+      'com.alerta.telegram/background_tasks',
+    );
+
+    // Notificar que estamos activos
+    try {
+      channel.invokeMethod('headlessEngineStarted', {
+        'timestamp': DateTime.now().millisecondsSinceEpoch,
+      });
+      print('✅ Canal nativo notificado de inicio del motor headless');
+    } catch (e) {
+      print('⚠️ Error al notificar canal nativo: $e');
+    }
+
+    // Inicializar servicio de alerta en segundo plano
+    try {
+      final service = BackgroundAlertService();
+      print('✅ BackgroundAlertService inicializado en motor headless');
+    } catch (e) {
+      print('❌ Error al inicializar BackgroundAlertService: $e');
+    }
+  } catch (e) {
+    print('❌ ERROR CRÍTICO en _onIosBackground: $e');
+  }
+}
+
+bool _initialURIHandled = false;
 
 void main() async {
   try {
@@ -19,11 +66,120 @@ void main() async {
   }
 }
 
-class MyApp extends ConsumerWidget {
-  const MyApp({Key? key}) : super(key: key);
+class MyApp extends ConsumerStatefulWidget {
+  const MyApp({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<MyApp> createState() => _MyAppState();
+}
+
+class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
+  StreamSubscription? _linkSubscription;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _initURIHandler();
+    _initLinksStream();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _linkSubscription?.cancel();
+    super.dispose();
+  }
+
+  // Para manejar links iniciales cuando la app se abre por primera vez
+  Future<void> _initURIHandler() async {
+    if (!_initialURIHandled) {
+      _initialURIHandled = true;
+      try {
+        final initialURI = await getInitialUri();
+        if (initialURI != null) {
+          _handleURI(initialURI);
+        }
+      } catch (e) {
+        print('Error al manejar URI inicial: $e');
+      }
+    }
+  }
+
+  // Para manejar links cuando la app ya está abierta
+  void _initLinksStream() {
+    if (!Platform.isIOS) return;
+
+    _linkSubscription = uriLinkStream.listen(
+      (Uri? uri) {
+        if (uri != null) {
+          _handleURI(uri);
+        }
+      },
+      onError: (Object err) {
+        print('Error en stream de links: $err');
+      },
+    );
+  }
+
+  // Manejar el URI recibido
+  void _handleURI(Uri uri) {
+    print('URI recibido: $uri');
+
+    // Verificar si el esquema coincide con nuestro esquema personalizado
+    if (uri.scheme == 'alertatelegram') {
+      // Procesar según la ruta
+      if (uri.path.isEmpty || uri.path == '/iniciar') {
+        // Iniciar alerta
+        _startAlert();
+      }
+    }
+  }
+
+  // Método para iniciar la alerta
+  void _startAlert() {
+    print('Iniciando alerta desde URL scheme');
+    // Esperar a que la aplicación esté completamente inicializada
+    // antes de intentar iniciar la alerta
+    Future.delayed(Duration(seconds: 1), () {
+      // Verificar que la aplicación esté inicializada
+      ref
+          .read(appInitializationProvider)
+          .when(
+            data: (initialized) {
+              if (initialized) {
+                // Iniciar la alerta
+                ref.read(alertStatusProvider.notifier).startAlert().then((
+                  success,
+                ) {
+                  if (success) {
+                    print('Alerta iniciada correctamente desde URL scheme');
+                  } else {
+                    print('Error al iniciar alerta desde URL scheme');
+                  }
+                });
+              } else {
+                print('App no inicializada, no se puede iniciar alerta');
+              }
+            },
+            loading: () => print('App cargando, esperando para iniciar alerta'),
+            error:
+                (error, _) =>
+                    print('Error en app, no se puede iniciar alerta: $error'),
+          );
+    });
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      // Reintentar verificar los links al reanudar la app
+      _initURIHandler();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     // Observar el estado de inicialización
     final appInitialization = ref.watch(appInitializationProvider);
 
@@ -71,7 +227,7 @@ class MyApp extends ConsumerWidget {
 
 // Pantalla de carga
 class SplashScreen extends StatelessWidget {
-  const SplashScreen({Key? key}) : super(key: key);
+  const SplashScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -107,8 +263,7 @@ class InitErrorScreen extends StatelessWidget {
   final String? error;
   final VoidCallback onRetry;
 
-  const InitErrorScreen({Key? key, this.error, required this.onRetry})
-    : super(key: key);
+  const InitErrorScreen({super.key, this.error, required this.onRetry});
 
   @override
   Widget build(BuildContext context) {
