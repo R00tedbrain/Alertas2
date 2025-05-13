@@ -29,6 +29,8 @@ import CoreLocation
     return engine
   }()
   
+  @IBOutlet weak var flutterViewController: FlutterViewController?
+  
   override func application(
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
@@ -73,6 +75,22 @@ import CoreLocation
       self,
       selector: #selector(handleRouteChange),
       name: AVAudioSession.routeChangeNotification,
+      object: nil
+    )
+    
+    // Registrar para notificaciones de interrupción
+    NotificationCenter.default.addObserver(
+      self,
+      selector: #selector(handleAudioSessionInterruption),
+      name: AVAudioSession.interruptionNotification,
+      object: nil
+    )
+    
+    // Registrar para notificaciones de terminación
+    NotificationCenter.default.addObserver(
+      self,
+      selector: #selector(handleAppWillTerminate),
+      name: UIApplication.willTerminateNotification,
       object: nil
     )
     
@@ -162,6 +180,7 @@ import CoreLocation
         result(true)
         
       case "deactivateAudioSession":
+        print("Desactivando sesión de audio")
         self.deactivateAudioSession()
         result(true)
         
@@ -170,7 +189,18 @@ import CoreLocation
         result(true)
         
       case "stopAudioEngine":
-        self.completelyStopAudioEngine()
+        print("Deteniendo motor de audio")
+        self.stopAudioEngine()
+        result(true)
+        
+      case "cleanupAudioResources":
+        print("Limpiando recursos de audio")
+        self.cleanupAudioResources()
+        result(true)
+        
+      case "forceStopAudio":
+        print("Forzando detención de audio")
+        self.forceStopAudio()
         result(true)
         
       default:
@@ -382,18 +412,61 @@ import CoreLocation
     }
   }
   
+  // Método seguro para desconectar nodos personalizados
+  private func safelyDetachCustomNodes() {
+    guard let engine = audioEngine else { return }
+    
+    // Solo proceder si el motor tiene nodos conectados
+    if engine.attachedNodes.count > 0 {
+      // Identificar solo los nodos que nosotros agregamos (no los internos)
+      let customNodes = engine.attachedNodes.filter { 
+        // Excluir nodos internos del sistema
+        node in node !== engine.inputNode && 
+                node !== engine.mainMixerNode && 
+                node !== engine.outputNode
+      }
+      
+      // Desconectar cada nodo personalizado de forma segura
+      for node in customNodes {
+        // Remover taps primero
+        if node.numberOfInputs > 0 {
+          for i in 0..<node.numberOfInputs {
+            node.removeTap(onBus: i)
+          }
+        }
+        
+        // Desconectar el nodo personalizado
+        print("Desconectando nodo personalizado de forma segura")
+        engine.detach(node)
+      }
+      
+      print("Nodos personalizados desconectados: \(customNodes.count)")
+    }
+  }
+
   // Detener completamente el motor de audio
   private func completelyStopAudioEngine() {
+    print("Deteniendo completamente el motor de audio")
+    
     if let engine = audioEngine {
+      // Primero remover cualquier tap en el nodo de entrada
       if engine.isRunning {
+        try? engine.inputNode.removeTap(onBus: 0)
+        
+        // Detener el motor
         engine.stop()
         print("Motor de audio detenido")
       }
       
-      // Limpiar todas las conexiones y nodos
-      engine.inputNode.removeTap(onBus: 0)
+      // Desconectar nodos personalizados de forma segura
+      safelyDetachCustomNodes()
+      
+      // Simplemente resetear el motor para limpiar las conexiones restantes
       engine.reset()
+      print("Motor de audio completamente limpiado")
     }
+    
+    // Liberar la referencia para permitir que el sistema la limpie
     audioEngine = nil
   }
   
@@ -557,5 +630,94 @@ import CoreLocation
     default:
       break
     }
+  }
+  
+  // Función para limpiar completamente todos los recursos de audio
+  private func cleanupAudioResources() {
+    print("Limpiando todos los recursos de audio")
+    
+    // Detener cualquier grabación activa primero
+    if let session = audioSession, session.isInputAvailable {
+      // Limpiar cualquier actividad de audio
+      do {
+        try session.setActive(false, options: .notifyOthersOnDeactivation)
+        print("Sesión de audio desactivada preventivamente")
+        try session.setActive(true, options: .notifyOthersOnDeactivation)
+        print("Sesión de audio reactivada para limpieza controlada")
+      } catch {
+        print("Error al reiniciar sesión: \(error)")
+        // Continuar con la limpieza
+      }
+    }
+    
+    // Primero detener el motor de audio de forma segura
+    if let engine = audioEngine {
+      if engine.isRunning {
+        // Remover taps de forma segura
+        try? engine.inputNode.removeTap(onBus: 0)
+        
+        // Detener el motor
+        engine.stop()
+        
+        // Usar nuestro método seguro para desconectar nodos personalizados
+        safelyDetachCustomNodes()
+        
+        // Resetear el motor después de desconectar los nodos personalizados
+        engine.reset()
+      }
+      
+      // Liberar referencia
+      audioEngine = nil
+    }
+    
+    // Desactivar completamente la sesión de audio
+    do {
+      // Si la sesión existe, desactivarla
+      if let session = audioSession {
+        try session.setActive(false, options: [.notifyOthersOnDeactivation])
+        print("Sesión de audio desactivada correctamente durante limpieza")
+      }
+    } catch {
+      print("Error al desactivar sesión de audio durante limpieza: \(error)")
+    }
+    
+    // Liberar referencia a la sesión
+    audioSession = nil
+    
+    print("Todos los recursos de audio liberados")
+  }
+  
+  // Método para manejar la terminación de la aplicación
+  @objc func handleAppWillTerminate() {
+    print("Aplicación terminando, limpiando recursos de audio")
+    cleanupAudioResources()
+  }
+  
+  // Detener completamente el motor de audio sin desconectar nodos internos
+  private func stopAudioEngine() {
+    print("Deteniendo motor de audio")
+    
+    if let engine = audioEngine, engine.isRunning {
+      // Solo detener el motor sin manipular los nodos
+      engine.stop()
+      print("Motor de audio detenido")
+    }
+  }
+  
+  // Forzar la detención completa del audio
+  private func forceStopAudio() {
+    print("Forzando detención completa del audio")
+    
+    // Primero desactivar la sesión de audio
+    deactivateAudioSession()
+    
+    // Detener el motor
+    stopAudioEngine()
+    
+    // Limpiar referencias
+    audioEngine = nil
+    audioSession = nil
+    
+    print("Detención forzada de audio completada")
   }
 }

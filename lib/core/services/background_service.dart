@@ -532,8 +532,8 @@ class BackgroundAlertService {
       }
     });
 
-    // Soporte para nombres antiguos - redireccionar al único evento 'stop'
-    service.on('stopAlert').listen((event) {
+    // Responder a los comandos para detener alerta
+    service.on('stopAlert').listen((event) async {
       _log('Recibida petición para detener alerta via stopAlert');
       try {
         // 1. Cancelar todos los timers activos
@@ -547,6 +547,29 @@ class BackgroundAlertService {
             _log(
               'Liberando recursos de audio en iOS desde el evento stopAlert',
             );
+
+            // Verificar si se solicitó detención forzada
+            bool forceStop = false;
+            if (event != null && event is Map<String, dynamic>) {
+              forceStop = event['force_stop_audio'] == true;
+            }
+
+            if (forceStop) {
+              _log('Solicitada detención forzada del audio');
+
+              // Llamada directa al código nativo para forzar detención
+              try {
+                const MethodChannel channel = MethodChannel(
+                  'com.alerta.telegram/background_tasks',
+                );
+                await channel.invokeMethod('forceStopAudio');
+                _log('Detención forzada del audio completada desde servicio');
+              } catch (e) {
+                _log('Error en detención forzada desde servicio: $e');
+                // Continuar con dispose normal
+              }
+            }
+
             audioService.dispose();
             _log('Recursos de audio liberados correctamente');
           } catch (e) {
@@ -1782,31 +1805,40 @@ class BackgroundAlertService {
     try {
       _log('Deteniendo alerta desde la aplicación principal');
 
-      // Limpiar recursos locales
+      // Limpiar recursos locales de forma simple
       dispose();
 
-      // En iOS, cancelar las tareas programadas con BGTaskScheduler antes de detener el servicio
+      // En iOS, forzar la detención del audio
       if (Platform.isIOS) {
         try {
-          _log('iOS: Cancelando tareas programadas con BGTaskScheduler');
-          await _backgroundChannel.invokeMethod('cancelBackgroundTasks');
-          _log('iOS: Tareas programadas canceladas exitosamente');
+          _log('iOS: Forzando detención del audio');
+          const MethodChannel channel = MethodChannel(
+            'com.alerta.telegram/background_tasks',
+          );
+          await channel.invokeMethod('forceStopAudio');
+          _log('iOS: Detención forzada del audio completada');
         } catch (e) {
-          _log('Error al cancelar tareas programadas en iOS: $e');
-          // Continuamos de todos modos
+          _log('Error al forzar detención del audio: $e');
+          // Continuar de todos modos
         }
       }
 
-      // CAMBIO IMPORTANTE: No detenemos el servicio completo, solo enviamos el comando para detener
-      // la lógica de alerta, pero mantenemos el servicio vivo para futuras alertas
+      // SIMPLIFICADO: Solo enviar el comando de stop sin intentar limpiar recursos manualmente
+      // Esto es importante para evitar interferir con la funcionalidad de grabación
       _log(
         'Enviando comando para detener la alerta pero manteniendo el servicio activo',
       );
+
       final FlutterBackgroundService service = FlutterBackgroundService();
       service.invoke("stopAlert", {
         'reason': 'user_stopped',
         'timestamp': DateTime.now().millisecondsSinceEpoch,
+        'force_stop_audio':
+            true, // Indicar que se debe forzar la detención del audio
       });
+
+      // Dar tiempo al sistema para procesar el comando
+      await Future.delayed(const Duration(seconds: 1));
 
       _log('Comando para detener la alerta enviado correctamente');
       _isAlertActive = false;
@@ -1822,33 +1854,6 @@ class BackgroundAlertService {
         return true;
       }
 
-      return false;
-    }
-  }
-
-  // Método para detener completamente el servicio en segundo plano
-  // Usar solo cuando realmente se quiera apagar todo el servicio (ej: logout)
-  Future<bool> stopBackgroundService() async {
-    try {
-      _log('Deteniendo completamente el servicio en segundo plano');
-
-      // Primero asegurarse de que la alerta está detenida
-      if (_isAlertActive) {
-        await stopAlert();
-      }
-
-      // Ahora sí detener el servicio completamente
-      final FlutterBackgroundService service = FlutterBackgroundService();
-      service.invoke("stop", {
-        'reason': 'service_shutdown',
-        'timestamp': DateTime.now().millisecondsSinceEpoch,
-      });
-
-      _log('Comando para detener completamente el servicio enviado');
-      return true;
-    } catch (e) {
-      _log('ERROR al detener servicio en segundo plano: $e');
-      _logger.e('Error al detener servicio en segundo plano: $e');
       return false;
     }
   }

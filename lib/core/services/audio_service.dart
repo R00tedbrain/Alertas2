@@ -512,50 +512,89 @@ class AudioService {
     _logger.d('Liberando recursos de audio');
     _isDisposing = true;
 
-    // Liberar recursos internos
-    await _releaseResources();
+    try {
+      // Liberar recursos internos
+      await _releaseResources();
 
-    // En iOS, desactivar la sesión de audio explícitamente
-    if (Platform.isIOS && _audioSession != null) {
-      try {
-        await Future.delayed(const Duration(milliseconds: 300));
-
-        // Intentar desactivar a través del canal nativo primero
+      // En iOS, desactivar la sesión de audio completa y correctamente
+      if (Platform.isIOS) {
         try {
+          await Future.delayed(const Duration(milliseconds: 300));
+
+          // Intentar la limpieza completa a través del canal nativo
           const MethodChannel channel = MethodChannel(
             'com.alerta.telegram/background_tasks',
           );
-          final bool? deactivationResult = await channel.invokeMethod<bool>(
-            'deactivateAudioSession',
-          );
 
-          if (deactivationResult == true) {
-            _logger.d('Sesión de audio desactivada a través del canal nativo');
-          } else {
-            _logger.w(
-              'No se pudo desactivar a través del canal nativo, usando audio_session',
-            );
-            await _audioSession!.setActive(false);
-            _logger.d('Sesión de audio desactivada a través de audio_session');
+          // Intentar cada llamada por separado, capturando errores individualmente
+          try {
+            // Primero detener el motor de audio
+            await channel.invokeMethod('stopAudioEngine');
+            _logger.d('Motor de audio detenido desde Flutter');
+          } catch (e) {
+            _logger.w('Error al detener motor de audio: $e');
+            // Continuar con el siguiente paso
           }
-        } catch (channelError) {
-          _logger.w(
-            'Error al desactivar a través del canal nativo: $channelError',
-          );
-          // Intentar a través de audio_session
-          await _audioSession!.setActive(false);
-          _logger.d('Sesión de audio desactivada a través de audio_session');
+
+          await Future.delayed(const Duration(milliseconds: 300));
+
+          try {
+            // Luego llamar al método específico de limpieza completa
+            final bool? cleanupResult = await channel.invokeMethod<bool>(
+              'cleanupAudioResources',
+            );
+
+            if (cleanupResult == true) {
+              _logger.d('Recursos de audio limpiados completamente en nativo');
+            } else {
+              _logger.w(
+                'La limpieza nativa no fue exitosa, intentando método alternativo',
+              );
+
+              try {
+                // Intentar desactivar la sesión como alternativa
+                await channel.invokeMethod('deactivateAudioSession');
+                _logger.d('Sesión de audio desactivada manualmente');
+              } catch (deactivateError) {
+                _logger.w('Error al desactivar sesión: $deactivateError');
+                // Intentar un último enfoque con audio_session
+              }
+            }
+          } catch (cleanupError) {
+            _logger.w('Error en limpieza de recursos: $cleanupError');
+            // Continuar con métodos alternativos
+          }
+
+          // Intentar a través de audio_session como último recurso
+          if (_audioSession != null) {
+            try {
+              await _audioSession!.setActive(false);
+              _logger.d(
+                'Sesión de audio desactivada a través de audio_session',
+              );
+            } catch (sessionError) {
+              _logger.w('Error con audio_session: $sessionError');
+              // No hay más opciones, continuar con la liberación de recursos
+            }
+          }
+        } catch (e) {
+          _logger.e('Error al limpiar recursos de audio: $e');
+          // Continuar con la liberación de referencias
         }
-      } catch (e) {
-        _logger.e('Error al desactivar sesión de audio: $e');
       }
+
+      // Eliminar todas las referencias para asegurar que el GC las limpie
+      _isInitialized = false;
+      _audioSession = null;
+      _tempPath = null;
+
+      _logger.d('Recursos de audio liberados completamente');
+    } catch (e) {
+      _logger.e('Error fatal durante dispose: $e');
+      // Asegurar que no quede en estado de disposición
+    } finally {
+      // Asegurar que siempre se reinicie el estado de disposición
+      _isDisposing = false;
     }
-
-    _isInitialized = false;
-    _audioSession = null;
-    _tempPath = null;
-    _isDisposing = false;
-
-    _logger.d('Recursos de audio liberados completamente');
   }
 }

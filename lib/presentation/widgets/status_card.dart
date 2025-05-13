@@ -6,7 +6,7 @@ import '../../domain/providers/providers.dart';
 class StatusCard extends StatelessWidget {
   final AlertStatus status;
 
-  const StatusCard({Key? key, required this.status}) : super(key: key);
+  const StatusCard({super.key, required this.status});
 
   @override
   Widget build(BuildContext context) {

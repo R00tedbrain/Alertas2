@@ -8,8 +8,7 @@ class ContactsList extends ConsumerWidget {
   final List<EmergencyContact> contacts;
   final Function(EmergencyContact)? onDelete;
 
-  const ContactsList({Key? key, required this.contacts, this.onDelete})
-    : super(key: key);
+  const ContactsList({super.key, required this.contacts, this.onDelete});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
