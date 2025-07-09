@@ -1,5 +1,10 @@
 # 🚨 AlertaTelegram | Sistema de Alertas de Emergencia
 
+![License](https://img.shields.io/badge/License-PRL%201.0-red.svg)
+![Commercial Use](https://img.shields.io/badge/Commercial%20Use-Prohibited-red.svg)
+![Distribution](https://img.shields.io/badge/Distribution-Prohibited-red.svg)
+![Type](https://img.shields.io/badge/Type-Proprietary%20Restrictive-red.svg)
+
 > **🇪🇸 Español** | **🇺🇸 [English](#english-version)**
 
 Sistema de alertas de emergencia que envía ubicación, audio y fotos a contactos de Telegram durante situaciones críticas.
@@ -132,6 +137,11 @@ Para problemas técnicos (NO comerciales):
 # English Version
 
 # 🚨 AlertaTelegram | Emergency Alert System
+
+![License](https://img.shields.io/badge/License-PRL%201.0-red.svg)
+![Commercial Use](https://img.shields.io/badge/Commercial%20Use-Prohibited-red.svg)
+![Distribution](https://img.shields.io/badge/Distribution-Prohibited-red.svg)
+![Type](https://img.shields.io/badge/Type-Proprietary%20Restrictive-red.svg)
 
 > **🇺🇸 English** | **🇪🇸 [Español](#-alertategram--sistema-de-alertas-de-emergencia)**
 

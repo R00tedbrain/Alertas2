@@ -1,8 +1,13 @@
-# Restrictive Software License
+# Proprietary Restrictive License (PRL)
 
 **AlertaTelegram** - Emergency Alert System
 
 Copyright (c) 2025 [Tu nombre/alias]. All rights reserved.
+
+**License Type**: Proprietary Restrictive License (PRL-1.0)  
+**Commercial Use**: Prohibited  
+**Distribution**: Prohibited  
+**Modification**: Personal use only
 
 ## License Terms
 
@@ -62,4 +67,7 @@ This license shall be governed by and construed in accordance with the laws of [
 
 ---
 
-**SPDX-License-Identifier: LicenseRef-Restrictive** 
+**SPDX-License-Identifier: LicenseRef-PRL-1.0**  
+**License-Name**: Proprietary Restrictive License  
+**License-Version**: 1.0  
+**License-URL**: https://github.com/[your-username]/AlertaTelegram/blob/main/LICENSE.md 

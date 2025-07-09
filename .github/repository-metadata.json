@@ -1,0 +1,47 @@
+{
+  "name": "AlertaTelegram",
+  "version": "1.0.0",
+  "description": "Emergency alert system that sends location, audio, and photos to Telegram contacts during critical situations",
+  "license": "LicenseRef-PRL-1.0",
+  "license_name": "Proprietary Restrictive License",
+  "license_version": "1.0",
+  "license_url": "https://github.com/[your-username]/AlertaTelegram/blob/main/LICENSE.md",
+  "license_type": "proprietary",
+  "commercial_use": false,
+  "distribution": false,
+  "modification": "personal-only",
+  "private_use": true,
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/[your-username]/AlertaTelegram.git"
+  },
+  "author": "[Tu nombre/alias]",
+  "copyright": "Copyright (c) 2025 [Tu nombre/alias]. All rights reserved.",
+  "keywords": [
+    "emergency",
+    "alert",
+    "telegram",
+    "flutter",
+    "proprietary",
+    "restrictive",
+    "personal-use"
+  ],
+  "license_details": {
+    "permissions": [
+      "private-use",
+      "modify-personal",
+      "study"
+    ],
+    "conditions": [
+      "include-copyright",
+      "include-license",
+      "attribution"
+    ],
+    "limitations": [
+      "commercial-use",
+      "distribution",
+      "liability",
+      "warranty"
+    ]
+  }
+} 
