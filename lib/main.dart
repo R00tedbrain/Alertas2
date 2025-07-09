@@ -6,6 +6,7 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:ui';
 import 'package:flutter/services.dart';
+import 'package:flutter/foundation.dart';
 
 import 'presentation/screens/home_screen.dart';
 import 'domain/providers/providers.dart';
@@ -93,6 +94,9 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
 
   // Para manejar links iniciales cuando la app se abre por primera vez
   Future<void> _initURIHandler() async {
+    // No manejar URIs en web
+    if (kIsWeb) return;
+
     if (!_initialURIHandled) {
       _initialURIHandled = true;
       try {
@@ -108,6 +112,10 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
 
   // Para manejar links cuando la app ya está abierta
   void _initLinksStream() {
+    // No inicializar en web, solo en móviles
+    if (kIsWeb) return;
+
+    // Solo continuar si estamos en iOS
     if (!Platform.isIOS) return;
 
     _linkSubscription = uriLinkStream.listen(

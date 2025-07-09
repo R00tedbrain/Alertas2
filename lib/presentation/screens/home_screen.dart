@@ -11,6 +11,7 @@ import '../widgets/alert_button.dart';
 import '../widgets/status_card.dart';
 import '../widgets/location_card.dart';
 import '../widgets/contacts_list.dart';
+import '../widgets/app_drawer.dart';
 import 'settings_screen.dart';
 
 class HomeScreen extends ConsumerWidget {
@@ -42,6 +43,7 @@ class HomeScreen extends ConsumerWidget {
           ),
         ],
       ),
+      drawer: const AppDrawer(),
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(16.0),
