@@ -79,6 +79,11 @@ This project is under a **VERY restrictive license**. By contributing, you must 
 
 Contribuidores hispanohablantes: Por favor lean [CONTRIBUTING.md](CONTRIBUTING.md) para la versión en español.
 
+## 📚 **DOCUMENTATION**
+
+- **Main Project**: [README.md](README.md) (Bilingual: Spanish & English)
+- **License**: [LICENSE](LICENSE) (Spanish) | [LICENSE_EN](LICENSE_EN) (English)
+
 ---
 
 **⚠️ FINAL NOTICE**: By submitting any contribution (issue, PR, comment), you automatically accept all these terms. No exceptions.

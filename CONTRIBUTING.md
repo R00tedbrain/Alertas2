@@ -79,6 +79,11 @@ Este proyecto está bajo una **licencia MUY restrictiva**. Al contribuir, debes 
 
 International contributors: Please read [CONTRIBUTING_EN.md](CONTRIBUTING_EN.md) for the English version.
 
+## 📚 **DOCUMENTACIÓN**
+
+- **Proyecto Principal**: [README.md](README.md) (Bilingüe: Español e Inglés)
+- **Licencia**: [LICENSE](LICENSE) (Español) | [LICENSE_EN](LICENSE_EN) (Inglés)
+
 ---
 
 **⚠️ AVISO FINAL**: Al enviar cualquier contribución (issue, PR, comentario), aceptas automáticamente todos estos términos. No hay excepciones.
