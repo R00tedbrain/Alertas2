@@ -9,6 +9,7 @@ import 'package:flutter/services.dart';
 import '../../config.dart' as app_config;
 import '../../core/services/audio_service.dart';
 import '../../core/services/background_service.dart';
+import '../../core/services/camera_service.dart';
 import '../../core/services/config_service.dart';
 import '../../core/services/location_service.dart';
 import '../../core/services/permission_service.dart';
@@ -25,6 +26,7 @@ final locationServiceProvider = Provider<LocationService>(
   (ref) => LocationService(),
 );
 final audioServiceProvider = Provider<AudioService>((ref) => AudioService());
+final cameraServiceProvider = Provider<CameraService>((ref) => CameraService());
 final telegramServiceProvider = Provider<TelegramService>(
   (ref) => TelegramService(),
 );
@@ -95,6 +97,17 @@ final appInitializationProvider = FutureProvider<bool>((ref) async {
     }
 
     try {
+      final cameraService = ref.read(cameraServiceProvider);
+      await cameraService.initialize();
+      initializedServices.add('Camera');
+    } catch (e) {
+      print('Error al inicializar CameraService: $e');
+      failedServices.add('Camera');
+      // En modo seguro continuamos aunque falle este servicio
+      if (!app_config.AppConfig.enableSafeMode) rethrow;
+    }
+
+    try {
       final backgroundService = ref.read(backgroundServiceProvider);
       await backgroundService.initialize();
       initializedServices.add('Background');
@@ -154,6 +167,7 @@ final permissionsProvider = FutureProvider<Map<String, bool>>((ref) async {
     'backgroundLocation':
         await permissionService.isBackgroundLocationPermissionGranted(),
     'microphone': await permissionService.isMicrophonePermissionGranted(),
+    'camera': await permissionService.isCameraPermissionGranted(),
     'notification': await permissionService.isNotificationPermissionGranted(),
     'allGranted': await permissionService.areAllPermissionsGranted(),
   };

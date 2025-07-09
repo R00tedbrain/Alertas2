@@ -50,6 +50,9 @@ dependencies:
   flutter_sound: ^9.2.13
   audio_session: ^0.1.18
   
+  # Cámara
+  camera: ^0.10.5+9
+  
   # API HTTP para comunicación
   dio: ^5.4.0
   

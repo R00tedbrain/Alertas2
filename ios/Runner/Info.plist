@@ -67,6 +67,8 @@
 	<string>Tu ubicación es necesaria para enviar actualizaciones a tus contactos de emergencia durante una alerta. Esta información solo se usa cuando la aplicación está abierta.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Se requiere acceso al micrófono para grabar y enviar audio a tus contactos de emergencia durante una alerta.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Se requiere acceso a la cámara para capturar fotos y enviarlas a tus contactos de emergencia durante una alerta.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Se requiere acceso a la biblioteca de fotos para guardar grabaciones de audio para evidencia.</string>
 	<key>UIApplicationSupportsIndirectInputEvents</key>

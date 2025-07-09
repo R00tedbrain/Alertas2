@@ -18,6 +18,7 @@ import '../services/audio_service.dart';
 import '../services/location_service.dart';
 import '../services/telegram_service.dart';
 import '../services/config_service.dart';
+import '../services/camera_service.dart';
 import '../../data/models/app_config.dart';
 import '../../data/models/emergency_contact.dart';
 
@@ -1202,6 +1203,106 @@ class BackgroundAlertService {
     _log('✅ Timer de audio configurado');
   }
 
+  // Método para programar captura de fotos periódicas
+  @pragma('vm:entry-point')
+  static void _schedulePhotoCapture(
+    ServiceInstance service,
+    TelegramService telegramService,
+    CameraService cameraService,
+    List<EmergencyContact> contacts,
+    AlertSettings settings,
+  ) {
+    _log('⏳ Configurando timer de fotos cada 20 segundos');
+
+    _timers.add(
+      Timer.periodic(const Duration(seconds: 20), (timer) async {
+        try {
+          _log('⏳ Timer de fotos activado, tomando fotos');
+
+          // Verificar estado de las cámaras antes de tomar fotos
+          _log('📱 Estado de cámaras disponibles:');
+          _log(
+            '   - Cámara frontal: ${cameraService.hasFrontCamera ? "✅ Disponible" : "❌ No disponible"}',
+          );
+          _log(
+            '   - Cámara trasera: ${cameraService.hasBackCamera ? "✅ Disponible" : "❌ No disponible"}',
+          );
+
+          // Tomar fotos con ambas cámaras
+          final photos = await cameraService.takeBothPhotos();
+
+          if (photos.isNotEmpty) {
+            _log('✅ Total de fotos tomadas: ${photos.length}');
+
+            // Identificar tipos de fotos tomadas
+            for (int i = 0; i < photos.length; i++) {
+              final photo = photos[i];
+              final photoType =
+                  photo.path.contains('front') ? 'frontal' : 'posterior';
+              _log('   📸 Foto $i: $photoType (${photo.path})');
+            }
+
+            // Enviar fotos con información de contexto
+            final timestamp = DateTime.now();
+            final caption =
+                '🚨 Fotos de emergencia\n📅 ${timestamp.day}/${timestamp.month}/${timestamp.year}\n⏰ ${timestamp.hour}:${timestamp.minute}:${timestamp.second}';
+
+            try {
+              await telegramService.sendPhotosToAllContacts(
+                contacts,
+                photos,
+                caption: caption,
+              );
+              _log('✅ Fotos enviadas correctamente');
+            } catch (e) {
+              _log('❌ Error al enviar fotos: $e');
+
+              // Intentar enviar fotos individualmente si falla el envío múltiple
+              for (int i = 0; i < photos.length; i++) {
+                try {
+                  final photo = photos[i];
+                  final photoType =
+                      photo.path.contains('front') ? 'frontal' : 'posterior';
+                  await telegramService.sendPhotoToAllContacts(
+                    contacts,
+                    photo.path,
+                    caption:
+                        '📸 Foto $photoType - ${timestamp.hour}:${timestamp.minute}:${timestamp.second}',
+                  );
+                  _log('✅ Foto $photoType enviada individualmente');
+                } catch (individualError) {
+                  _log('❌ Error al enviar foto individual: $individualError');
+                }
+              }
+            }
+          } else {
+            _log('❌ No se pudieron tomar fotos');
+
+            // Enviar mensaje informativo si no se pueden tomar fotos
+            try {
+              await telegramService.sendMessageToAllContacts(
+                contacts,
+                '⚠️ No se pudieron tomar fotos en este momento. Verifique permisos de cámara.',
+                markdown: false,
+              );
+            } catch (e) {
+              _log('❌ Error al enviar mensaje de error de fotos: $e');
+            }
+          }
+        } catch (e) {
+          _log('❌ Error al capturar y enviar fotos: $e');
+          service.invoke('logError', {
+            'source': 'photoTimer',
+            'error': e.toString(),
+            'timestamp': DateTime.now().millisecondsSinceEpoch,
+          });
+        }
+      }),
+    );
+
+    _log('✅ Timer de fotos configurado');
+  }
+
   // Iniciar alerta en segundo plano - método refactorizado
   @pragma('vm:entry-point')
   static Future<void> _startAlert(
@@ -1242,6 +1343,7 @@ class BackgroundAlertService {
 
     final locationService = LocationService();
     final audioService = AudioService();
+    final cameraService = CameraService();
     final telegramService = TelegramService();
 
     // Inicializar servicios
@@ -1338,6 +1440,19 @@ class BackgroundAlertService {
           }
         }
       }
+    }
+
+    // Inicializar servicio de cámara
+    _log('Inicializando servicio de cámara');
+    bool cameraInitialized = false;
+    try {
+      await cameraService.initialize();
+      cameraInitialized = true;
+      _log('Servicio de cámara inicializado correctamente');
+    } catch (e) {
+      _log('Error al inicializar cámara: $e');
+      // Continuamos sin cámara en caso de error
+      cameraInitialized = false;
     }
 
     // Configurar servicios específicos para iOS
@@ -1466,6 +1581,21 @@ class BackgroundAlertService {
           contacts,
           settings,
         );
+
+        // 4. Programar captura de fotos (solo si la cámara está inicializada)
+        if (cameraInitialized) {
+          _schedulePhotoCapture(
+            service,
+            telegramService,
+            cameraService,
+            contacts,
+            settings,
+          );
+        } else {
+          _log(
+            'Captura de fotos no programada - servicio de cámara no inicializado',
+          );
+        }
       } else {
         _log(
           '❌ ERROR: No se pudo enviar la información inicial, no se programarán actualizaciones',

@@ -508,6 +508,132 @@ class TelegramService {
     });
   }
 
+  // Enviar foto individual
+  Future<bool> sendPhoto(
+    String chatId,
+    String filePath, {
+    String? caption,
+  }) async {
+    print('🔶 INICIO sendPhoto - chatId: $chatId, archivo: $filePath');
+
+    if (!isInitialized) {
+      print('ERROR: TelegramService no inicializado al intentar enviar foto');
+      _logger.e('TelegramService no inicializado');
+      return false;
+    }
+
+    return await _withRetry<bool>(() async {
+      try {
+        // Verificar que el archivo existe
+        final file = File(filePath);
+        if (!await file.exists()) {
+          print(
+            'ERROR: El archivo dejó de existir antes de enviarlo: $filePath',
+          );
+          _logger.e('El archivo dejó de existir: $filePath');
+          throw Exception('El archivo dejó de existir durante el envío');
+        }
+
+        // Preparar datos
+        final formData = FormData.fromMap({
+          'chat_id': chatId,
+          if (caption != null) 'caption': caption,
+          'photo': await MultipartFile.fromFile(
+            filePath,
+            filename: 'emergency_photo.jpg',
+          ),
+        });
+
+        final response = await _dio.post(
+          '$_baseUrl$_token/sendPhoto',
+          data: formData,
+        );
+
+        if (response.statusCode == 200) {
+          print('Foto enviada exitosamente a $chatId');
+          _logger.i('Foto enviada a $chatId');
+          return true;
+        } else {
+          print('ERROR al enviar foto: Código ${response.statusCode}');
+          print('Respuesta: ${response.data}');
+          _logger.e('Error al enviar foto: ${response.statusCode}');
+          throw Exception('Error HTTP ${response.statusCode}');
+        }
+      } on DioException catch (e) {
+        print('ERROR Dio al enviar foto: ${e.message}');
+        if (e.response != null) {
+          print('Código de error: ${e.response?.statusCode}');
+          print('Respuesta de error: ${e.response?.data}');
+        }
+        _logger.e('Error Dio al enviar foto: ${e.message}');
+        throw e; // Lanzar para que _withRetry reintente
+      } catch (e) {
+        print('ERROR general al enviar foto: $e');
+        _logger.e('Error al enviar foto: $e');
+        throw e; // Lanzar para que _withRetry reintente
+      }
+    }, operationName: 'envío de foto').catchError((e) {
+      print('Todos los reintentos fallaron para enviar foto: $e');
+      return false;
+    });
+  }
+
+  // Enviar múltiples fotos
+  Future<bool> sendPhotos(
+    String chatId,
+    List<File> photos, {
+    String? caption,
+  }) async {
+    print('🔶 INICIO sendPhotos - chatId: $chatId, fotos: ${photos.length}');
+
+    if (!isInitialized) {
+      print('ERROR: TelegramService no inicializado al intentar enviar fotos');
+      _logger.e('TelegramService no inicializado');
+      return false;
+    }
+
+    if (photos.isEmpty) {
+      print('ERROR: Lista de fotos vacía');
+      return false;
+    }
+
+    bool allSuccessful = true;
+    int successCount = 0;
+
+    for (int i = 0; i < photos.length; i++) {
+      final photo = photos[i];
+      final photoCaption =
+          caption != null
+              ? (i == 0 ? caption : null)
+              : // Solo caption en primera foto
+              '📸 Foto ${i + 1}/${photos.length}';
+
+      try {
+        final success = await sendPhoto(
+          chatId,
+          photo.path,
+          caption: photoCaption,
+        );
+        if (success) {
+          successCount++;
+        } else {
+          allSuccessful = false;
+        }
+
+        // Pequeña pausa entre fotos para evitar rate limiting
+        if (i < photos.length - 1) {
+          await Future.delayed(const Duration(milliseconds: 500));
+        }
+      } catch (e) {
+        allSuccessful = false;
+        print('Error al enviar foto ${i + 1}: $e');
+      }
+    }
+
+    print('Fotos enviadas: $successCount/${photos.length} exitosas');
+    return successCount > 0; // Éxito si al menos una foto se envió
+  }
+
   // Método unificado para enviar cualquier tipo de contenido con reintentos
   Future<bool> sendWithRetry<T>({
     required List<EmergencyContact> contacts,
@@ -623,6 +749,38 @@ class TelegramService {
       operationName: 'archivo de audio',
       maxRetries: maxRetries,
       sendFunction: (contact) => sendAudio(contact.chatId, audioPath),
+    );
+  }
+
+  // Enviar foto a todos los contactos con reintentos
+  Future<bool> sendPhotoToAllContacts(
+    List<EmergencyContact> contacts,
+    String photoPath, {
+    String? caption,
+    int maxRetries = 3,
+  }) async {
+    return sendWithRetry(
+      contacts: contacts,
+      operationName: 'foto',
+      maxRetries: maxRetries,
+      sendFunction:
+          (contact) => sendPhoto(contact.chatId, photoPath, caption: caption),
+    );
+  }
+
+  // Enviar múltiples fotos a todos los contactos con reintentos
+  Future<bool> sendPhotosToAllContacts(
+    List<EmergencyContact> contacts,
+    List<File> photos, {
+    String? caption,
+    int maxRetries = 3,
+  }) async {
+    return sendWithRetry(
+      contacts: contacts,
+      operationName: 'fotos múltiples',
+      maxRetries: maxRetries,
+      sendFunction:
+          (contact) => sendPhotos(contact.chatId, photos, caption: caption),
     );
   }
 

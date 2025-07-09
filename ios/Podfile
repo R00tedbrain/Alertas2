@@ -61,6 +61,9 @@ post_install do |installer|
         ## Permiso de micrófono - esencial para grabar audio
         'PERMISSION_MICROPHONE=1',
         
+        ## Permiso de cámara - esencial para capturar fotos durante emergencias
+        'PERMISSION_CAMERA=1',
+        
         ## Permiso de ubicación - para seguimiento en tiempo real
         'PERMISSION_LOCATION=1',
         'PERMISSION_LOCATION_WHENINUSE=1',

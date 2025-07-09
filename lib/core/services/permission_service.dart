@@ -35,6 +35,9 @@ class PermissionService {
     permissionsStatus[Permission.notification] =
         await Permission.notification.request();
 
+    // Cámara
+    permissionsStatus[Permission.camera] = await requestCameraPermission();
+
     return permissionsStatus;
   }
 
@@ -155,6 +158,42 @@ class PermissionService {
     }
   }
 
+  // Método especializado para solicitar permiso de cámara
+  Future<PermissionStatus> requestCameraPermission() async {
+    try {
+      // Primero verificamos el estado actual
+      var status = await Permission.camera.status;
+      _logger.d('Estado actual del permiso de cámara: $status');
+
+      // Si ya está concedido, no necesitamos solicitarlo de nuevo
+      if (status.isGranted) {
+        _logger.d('Permiso de cámara ya concedido');
+        return status;
+      }
+
+      // Si está permanentemente denegado, redirigimos a configuraciones
+      if (status.isPermanentlyDenied) {
+        _logger.w(
+          'Permiso de cámara permanentemente denegado. Abriendo configuración...',
+        );
+        await openAppSettings();
+        // Verificamos nuevamente después de que el usuario regrese de configuraciones
+        return await Permission.camera.status;
+      }
+
+      // Solicitamos el permiso
+      _logger.d('Solicitando permiso de cámara...');
+      status = await Permission.camera.request();
+      _logger.d('Resultado de la solicitud de cámara: $status');
+
+      return status;
+    } catch (e) {
+      _logger.e('Error al solicitar permiso de cámara: $e');
+      // En caso de error, devolvemos el estado actual
+      return await Permission.camera.status;
+    }
+  }
+
   // Verificar si todos los permisos están concedidos
   Future<bool> areAllPermissionsGranted() async {
     // Verificar ubicación
@@ -168,6 +207,10 @@ class PermissionService {
     // Verificar micrófono
     final microphoneStatus = await Permission.microphone.status;
     if (!microphoneStatus.isGranted) return false;
+
+    // Verificar cámara
+    final cameraStatus = await Permission.camera.status;
+    if (!cameraStatus.isGranted) return false;
 
     // Verificar notificaciones
     final notificationStatus = await Permission.notification.status;
@@ -193,6 +236,12 @@ class PermissionService {
 
   Future<bool> isNotificationPermissionGranted() async {
     return await Permission.notification.isGranted;
+  }
+
+  Future<bool> isCameraPermissionGranted() async {
+    final status = await Permission.camera.status;
+    _logger.d('Estado actual del permiso de cámara: $status');
+    return status.isGranted;
   }
 
   // Abrir configuración de la aplicación
