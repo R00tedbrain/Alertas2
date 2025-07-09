@@ -1,0 +1,72 @@
+RESTRICTIVE SOFTWARE LICENSE - ALERTA TELEGRAM
+===================================================
+
+Copyright (c) 2025 - All rights reserved
+Project: AlertaTelegram
+Author: [Your name/alias]
+
+TERMS AND CONDITIONS OF USE
+
+1. GRANTED PERMISSIONS
+   ✅ Study the source code
+   ✅ Use the application for personal purposes
+   ✅ Make modifications for personal use
+   ✅ Fork the repository for study purposes
+
+2. STRICT RESTRICTIONS
+   ❌ PROHIBITED commercial use or for profit
+   ❌ PROHIBITED distribution of code or application
+   ❌ PROHIBITED sale, rental, or monetization
+   ❌ PROHIBITED publication in app stores
+   ❌ PROHIBITED removal of this license or attributions
+
+3. PERMITTED MODIFICATIONS
+   ✅ You may modify the code for personal use
+   ✅ MANDATORY to maintain this license in modified files
+   ✅ MANDATORY to include attribution to the original project
+   ✅ MANDATORY to mention the original author in modifications
+
+4. REQUIRED ATTRIBUTION
+   If you make modifications, you must include:
+   - "Based on AlertaTelegram by [Original Author]"
+   - Link to the original repository
+   - This same license in your modified version
+   - Clear list of changes made
+
+5. DISCLAIMER
+   This software is provided "AS IS", without warranties of any kind.
+   The author is NOT responsible for:
+   - Direct or indirect damages
+   - Data loss
+   - Security issues
+   - Incorrect functioning
+   - Misuse of the application
+
+6. LICENSE VIOLATION
+   In case of violation of these terms:
+   - The license is automatically revoked
+   - The infringer must immediately cease use
+   - Legal actions are reserved
+   - No grace period for correction
+
+7. JURISDICTION
+   This license is governed by the laws of [Your country/jurisdiction].
+   Any dispute will be resolved in competent courts.
+
+8. CONTACT
+   For special permissions or inquiries: [your-email@domain.com]
+
+IMPORTANT NOTICE:
+================
+By using, downloading, cloning, or interacting with this code, 
+you automatically accept all terms of this license.
+
+Failure to comply with any term constitutes a copyright violation 
+and may result in legal action.
+
+---
+This license is effective from the publication date and remains 
+valid until explicitly revoked by the author.
+
+License version: 1.0
+Date: $(date +%Y-%m-%d) 

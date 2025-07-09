@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 🛡️ Read License First
+    url: https://github.com/your-username/AlertaTelegram/blob/main/LICENSE
+    about: "⚠️ IMPORTANT: Read the restrictive license before submitting issues"
+  - name: 🌐 English License
+    url: https://github.com/your-username/AlertaTelegram/blob/main/LICENSE_EN
+    about: "📄 English version of the restrictive license"
+  - name: 🤝 Contributing Guidelines
+    url: https://github.com/your-username/AlertaTelegram/blob/main/CONTRIBUTING.md
+    about: "📋 Read contribution terms before submitting PRs" 

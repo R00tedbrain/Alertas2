@@ -1,0 +1,72 @@
+LICENCIA RESTRICTIVA DE SOFTWARE - ALERTA TELEGRAM
+=========================================================
+
+Copyright (c) 2025 - Todos los derechos reservados
+Proyecto: AlertaTelegram
+Autor: [Tu nombre/alias]
+
+TÉRMINOS Y CONDICIONES DE USO
+
+1. PERMISOS OTORGADOS
+   ✅ Estudiar el código fuente
+   ✅ Usar la aplicación para fines personales
+   ✅ Realizar modificaciones para uso personal
+   ✅ Realizar fork del repositorio para estudio
+
+2. RESTRICCIONES ESTRICTAS
+   ❌ PROHIBIDO el uso comercial o con fines de lucro
+   ❌ PROHIBIDA la distribución del código o aplicación
+   ❌ PROHIBIDA la venta, alquiler o monetización
+   ❌ PROHIBIDA la publicación en tiendas de aplicaciones
+   ❌ PROHIBIDO remover esta licencia o atribuciones
+
+3. MODIFICACIONES PERMITIDAS
+   ✅ Puedes modificar el código para uso personal
+   ✅ OBLIGATORIO mantener esta licencia en archivos modificados
+   ✅ OBLIGATORIO incluir atribución al proyecto original
+   ✅ OBLIGATORIO mencionar al autor original en modificaciones
+
+4. ATRIBUCIÓN REQUERIDA
+   Si realizas modificaciones, debes incluir:
+   - "Basado en AlertaTelegram por [Autor Original]"
+   - Enlace al repositorio original
+   - Esta misma licencia en tu versión modificada
+   - Lista clara de cambios realizados
+
+5. EXENCIÓN DE RESPONSABILIDAD
+   Este software se proporciona "TAL COMO ESTÁ", sin garantías de ningún tipo.
+   El autor NO se hace responsable de:
+   - Daños directos o indirectos
+   - Pérdida de datos
+   - Problemas de seguridad
+   - Funcionamiento incorrecto
+   - Uso indebido de la aplicación
+
+6. VIOLACIÓN DE LICENCIA
+   En caso de violación de estos términos:
+   - Se revoca automáticamente la licencia de uso
+   - El infractor debe cesar inmediatamente el uso
+   - Se reservan acciones legales correspondientes
+   - No hay período de gracia para corrección
+
+7. JURISDICCIÓN
+   Esta licencia se rige por las leyes de [Tu país/jurisdicción].
+   Cualquier disputa será resuelta en los tribunales competentes.
+
+8. CONTACTO
+   Para permisos especiales o consultas: [tu-email@dominio.com]
+
+AVISO IMPORTANTE:
+================
+Al usar, descargar, clonar o interactuar con este código, 
+aceptas automáticamente todos los términos de esta licencia.
+
+El incumplimiento de cualquier término constituye una violación 
+de derechos de autor y puede resultar en acciones legales.
+
+---
+Esta licencia es efectiva desde la fecha de publicación y permanece 
+vigente hasta que sea explícitamente revocada por el autor.
+
+Versión de licencia: 1.0
+Fecha: $(date +%Y-%m-%d) 

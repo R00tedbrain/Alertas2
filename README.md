@@ -1,197 +1,131 @@
-# Alerta Telegram
+# 🚨 AlertaTelegram
 
-Una aplicación de emergencia que envía automáticamente ubicación y clips de audio a contactos de emergencia vía Telegram Bot cuando se detecta un problema.
+Sistema de alertas de emergencia que envía ubicación, audio y fotos a contactos de Telegram durante situaciones críticas.
 
-## Funcionalidades
+## 📱 Características Principales
 
-- Envío de ubicación actual al pulsar el botón "Problema detectado"
-- Actualizaciones periódicas de ubicación cada minuto
-- Grabación y envío de clips de audio de 30 segundos cada 30 segundos
-- Almacenamiento local de contactos de emergencia (chat_id de Telegram)
-- Funcionamiento en segundo plano incluso con la aplicación cerrada
-- Configuración personalizable de intervalos y token del bot
+- **🎤 Grabaciones de Audio**: Envío automático cada 30 segundos en segundo plano
+- **📍 Ubicación en Tiempo Real**: Actualización continua de posición GPS
+- **📷 Fotos de Emergencia**: Captura de cámaras frontal y trasera cada 20 segundos
+- **🤖 Integración Telegram**: Envío directo a través de bot personalizado
+- **⚡ Funcionamiento en Background**: Continúa funcionando aunque la app esté cerrada
 
-## Tecnologías utilizadas
+## ⚠️ Restricciones Importantes - iOS
 
-- Flutter 3.x con null safety
-- Riverpod para gestión de estado
-- SQLite/SharedPreferences para almacenamiento local
-- Flutter Background Service para servicios en segundo plano
-- Dio para comunicación HTTP con la API de Telegram Bot
-- Geolocator para obtener ubicación
-- Flutter Sound para grabación de audio
-- Permission Handler para gestión de permisos
+En dispositivos iOS, debido a limitaciones del sistema:
+- ✅ **Audio y ubicación** funcionan perfectamente en segundo plano
+- ❌ **Las fotos solo se capturan cuando la app está abierta**
+- 💡 **Recomendación**: Mantener la app abierta durante emergencias para obtener fotos
 
-## Requisitos previos
+## 🛠️ Configuración Inicial
 
-1. Bot de Telegram - Necesitas crear un bot usando [BotFather](https://t.me/botfather) y obtener su token
-2. Cada contacto de emergencia debe iniciar el bot con `/start` para poder recibir mensajes
-3. Permisos de ubicación, micrófono y notificaciones
+### 1. Crear Bot de Telegram
+1. Busca `@BotFather` en Telegram
+2. Envía `/newbot`
+3. Sigue las instrucciones para crear tu bot
+4. Guarda el **token** que te proporciona
 
-## Estructura del proyecto
+### 2. Obtener Chat IDs
+1. Envía un mensaje a tu bot
+2. Usa `@userinfobot` para obtener tu Chat ID
+3. Añade los Chat IDs en la configuración de la app
 
-```
-lib/
-├── core/
-│   ├── constants/     # Constantes de la aplicación
-│   ├── exceptions/    # Clases de error personalizadas
-│   ├── services/      # Servicios (Telegram, ubicación, audio, etc.)
-│   └── utils/         # Funciones de utilidad
-├── data/
-│   ├── datasources/   # Fuentes de datos (local, remoto)
-│   ├── models/        # Modelos de datos
-│   └── repositories/  # Repositorios de datos
-├── domain/
-│   └── providers/     # Providers de Riverpod
-└── presentation/
-    ├── screens/       # Pantallas de la aplicación
-    ├── viewmodels/    # ViewModels (lógica de presentación)
-    └── widgets/       # Widgets reutilizables
-```
+### 3. Configurar Permisos
+- 📍 Ubicación (siempre)
+- 🎤 Micrófono
+- 📷 Cámara
+- 🔔 Notificaciones
 
-## Configuración inicial
+## 🚀 Instalación
 
-1. Crear un bot en Telegram usando [BotFather](https://t.me/botfather)
-2. Obtener el token del bot
-3. Iniciar el bot con `/start` desde cada cuenta que será contacto de emergencia
-4. Obtener el chat_id de cada contacto
-5. Configurar el token y los contactos en la aplicación
+```bash
+# Clonar repositorio
+git clone https://github.com/tu-usuario/AlertaTelegram.git
 
-## Funcionamiento
+# Instalar dependencias
+flutter pub get
 
-1. Al pulsar "PROBLEMA DETECTADO" se inicia un servicio en segundo plano
-2. La aplicación envía inmediatamente la ubicación actual a todos los contactos configurados
-3. Periódicamente envía actualizaciones de ubicación según el intervalo configurado
-4. Graba y envía clips de audio según los intervalos configurados
-5. Todo continúa en segundo plano incluso si la aplicación se cierra
-6. Para detener la alerta, pulsa "DETENER ALERTA"
-
-## Permisos requeridos
-
-- Ubicación (incluida en segundo plano)
-- Micrófono
-- Notificaciones
-- Ejecución en segundo plano
-
-## Instalación y compilación
-
-1. Clonar el repositorio
-   ```bash
-   git clone https://github.com/tu-usuario/alerta-telegram.git
-   ```
-
-2. Instalar dependencias
-   ```bash
-   flutter pub get
-   ```
-
-3. Ejecutar la aplicación
-   ```bash
-   flutter run
-   ```
-
-4. Compilar para Android
-   ```bash
-   flutter build apk --release
-   ```
-
-5. Compilar para iOS
-   ```bash
-   flutter build ios --release
-   ```
-
-## Notas importantes
-
-La aplicación requiere Android SDK 24 (Android 7.0 Nougat) o superior debido a los requisitos de biblioteca de Flutter Sound y otros componentes. La aplicación está configurada para usar Java 11 y requiere desugaring habilitado para funcionar correctamente.
-
-## Actualizaciones y correcciones
-
-- Reemplazado paquete descontinuado `telegram_client` por `dio` para manejo directo de la API de Telegram
-- Actualizada la ruta de archivos de configuración para uso correcto
-- Corregidas referencias de importaciones faltantes para servicios de Flutter
-- Actualizado el manejo de permisos para evitar llamadas recursivas
-- Actualizada la configuración de Gradle para Android con desugaring de Java 8
-- Actualizado el SDK mínimo a 24 para compatibilidad con Flutter Sound
-
-## Configuración del archivo config.json
-
-El archivo `assets/config/config.json` contiene la configuración inicial:
-
-```json
-{
-  "telegram_bot_token": "TU_TOKEN_AQUI",
-  "emergency_contacts": [
-    {
-      "name": "Contacto de Emergencia 1",
-      "chat_id": "12345678"
-    }
-  ],
-  "alert_settings": {
-    "location_update_interval_seconds": 60,
-    "audio_recording_duration_seconds": 30,
-    "audio_recording_interval_seconds": 30
-  }
-}
+# Ejecutar en dispositivo
+flutter run
 ```
 
-## Licencia
+## 📋 Requisitos
 
-MIT
+- Flutter 3.0+
+- Dart 3.0+
+- iOS 14.0+ / Android 6.0+
+- Conexión a internet
+- Cuenta de Telegram
 
-## Contribuir
+## 🔧 Dependencias Principales
 
-Las contribuciones son bienvenidas. Por favor, abre un issue o envía un pull request para cualquier mejora.
+- `camera`: Captura de fotos
+- `geolocator`: Servicios de ubicación
+- `flutter_sound`: Grabación de audio
+- `permission_handler`: Gestión de permisos
+- `dio`: Cliente HTTP para Telegram API
 
-# Solución a problemas de segundo plano en iOS
+## 📚 Documentación
 
-## Problema resuelto
+- [Configuración de Bot Telegram](TELEGRAM_BOT_SETUP.md)
+- [Esquema de URLs](URL_SCHEME.md)
 
-Se ha solucionado un error donde la grabación de audio en segundo plano dejó de funcionar después de implementar un URL Scheme. El error mostraba "MissingPluginException" para los métodos:
+## 🛡️ LICENCIA Y TÉRMINOS DE USO
 
-1. `configureAudioSession` en audio_service.dart:175
-2. `activateAudioSession` en audio_service.dart:180
-3. `setupBackgroundTasks` en el canal nativo "com.alerta.telegram/background_tasks"
+**⚠️ IMPORTANTE: Este proyecto está bajo una licencia MUY RESTRICTIVA**
 
-## Cambios realizados
+### ❌ PROHIBICIONES ESTRICTAS:
+- **Uso comercial o con fines de lucro**
+- **Distribución del código o aplicación**
+- **Venta, alquiler o monetización**
+- **Publicación en tiendas de aplicaciones**
+- **Remoción de atribuciones o licencia**
 
-### 1. AppDelegate.swift
+### ✅ PERMISOS LIMITADOS:
+- Uso personal únicamente
+- Estudio del código fuente
+- Modificaciones para uso personal
+- Fork para análisis (sin distribución)
 
-- Implementado correctamente el identificador de tarea para `flutter_background_service_ios`:
-  ```swift
-  SwiftFlutterBackgroundServicePlugin.taskIdentifier = "com.alerta.telegram.background.refresh"
-  ```
+### 📋 OBLIGACIONES:
+- Mantener atribución al autor original
+- Incluir esta licencia en modificaciones
+- No redistribuir versiones modificadas
 
-- Configurada la sesión de audio correctamente
+**Al usar este código, aceptas automáticamente todos los términos de la [LICENCIA](LICENSE)**
 
-- Implementado el método del canal nativo para manejar:
-  - `configureAudioSession`: Configura la sesión de audio desde Flutter
-  - `activateAudioSession`: Activa la sesión de audio desde Flutter
-  - `setupBackgroundTasks`: Confirma la configuración de tareas en segundo plano
+### ⚖️ Protección Legal
 
-### 2. Info.plist
+Este software está protegido por derechos de autor. El uso no autorizado puede resultar en:
+- Acciones legales por violación de copyright
+- Demandas por uso comercial no autorizado
+- Solicitudes de cese y desistimiento
 
-- Actualizados los identificadores de BGTaskScheduler para que coincidan con los utilizados en el código:
-  ```xml
-  <key>BGTaskSchedulerPermittedIdentifiers</key>
-  <array>
-    <string>com.alerta.telegram.background.refresh</string>
-    <string>dev.flutter.background.refresh</string>
-  </array>
-  ```
+### 📞 Contacto para Permisos
 
-### 3. Runner-Bridging-Header.h
+Para solicitar permisos especiales o uso comercial:
+- Email: [tu-email@dominio.com]
+- Solo se considerarán solicitudes por escrito
 
-- Simplificado para eliminar importaciones innecesarias, manteniendo solo:
-  ```objc
-  #import "GeneratedPluginRegistrant.h"
-  ```
+## 🆘 Soporte
 
-## Recomendaciones adicionales
+Para problemas técnicos (NO comerciales):
+- Abrir issue en GitHub
+- Incluir logs y pasos para reproducir
+- Solo para uso personal autorizado
 
-1. **Optimización de batería**: Para asegurar que la aplicación funcione correctamente en segundo plano en iOS, es crucial que los usuarios no tengan habilitada la optimización de batería para esta app.
+---
 
-2. **Límites de iOS**: Tenga en cuenta que iOS tiene restricciones más estrictas para procesos en segundo plano que Android. Los procesos en segundo plano en iOS generalmente solo pueden ejecutarse durante 30 segundos antes de ser suspendidos.
+**Copyright © 2025 - Todos los derechos reservados**  
+**Proyecto: AlertaTelegram**  
+**Autor: [Tu nombre/alias]**
 
-3. **Pruebas**: Realizar pruebas exhaustivas en dispositivos reales es fundamental para garantizar el correcto funcionamiento de las funciones de audio en segundo plano.
+> ⚠️ **AVISO**: Este README no sustituye la licencia completa. 
+> Lee el archivo [LICENSE](LICENSE) para términos legales completos.
 
-4. **Actualizaciones del plugin**: Mantenerse actualizado con las últimas versiones de `flutter_background_service` y sus dependencias relacionadas.
+---
+
+## 🌐 Versiones de Idioma
+
+- **🇪🇸 Español**: [README.md](README.md) | [LICENCIA](LICENSE)
+- **🇺🇸 English**: [README_EN.md](README_EN.md) | [LICENSE_EN](LICENSE_EN)
