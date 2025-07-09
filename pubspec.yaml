@@ -43,6 +43,8 @@ dependencies:
   
   # Geolocalización
   geolocator: ^10.1.0
+  flutter_map: ^6.1.0
+  latlong2: ^0.9.1
   
   # Grabación de audio
   flutter_sound: ^9.2.13

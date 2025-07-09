@@ -6,6 +6,7 @@ import '../screens/how_it_works_screen.dart';
 import '../screens/terms_of_use_screen.dart';
 import '../screens/privacy_policy_screen.dart';
 import '../screens/remove_ads_screen.dart';
+import '../screens/my_location_screen.dart';
 
 class AppDrawer extends StatelessWidget {
   const AppDrawer({super.key});
@@ -86,6 +87,25 @@ class AppDrawer extends StatelessWidget {
                         context,
                         MaterialPageRoute(
                           builder: (context) => const RemoveAdsScreen(),
+                        ),
+                      );
+                    },
+                  ),
+
+                  // Divider para separar las opciones principales de las utilidades
+                  const Divider(height: 1),
+
+                  _buildDrawerItem(
+                    context,
+                    icon: Icons.my_location,
+                    title: 'Mi Ubicación',
+                    subtitle: 'Ver ubicación en tiempo real',
+                    onTap: () {
+                      Navigator.of(context).pop();
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const MyLocationScreen(),
                         ),
                       );
                     },
