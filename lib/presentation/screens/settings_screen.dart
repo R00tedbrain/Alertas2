@@ -7,6 +7,7 @@ import '../../domain/providers/providers.dart';
 import '../../data/models/emergency_contact.dart';
 import '../../data/models/app_config.dart';
 import '../../core/constants/app_constants.dart';
+import 'remove_ads_screen.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
@@ -70,6 +71,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
                 // Sección de URL Scheme
                 _buildURLSchemeSection(context),
+
+                const SizedBox(height: 24),
+
+                // Sección Premium
+                _buildPremiumSection(context),
               ],
             ),
           ),
@@ -450,6 +456,181 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildPremiumSection(BuildContext context) {
+    final hasPremium = ref.watch(hasPremiumProvider);
+    final premiumAsync = ref.watch(premiumSubscriptionProvider);
+
+    return Card(
+      elevation: 4,
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  hasPremium ? Icons.star : Icons.star_border,
+                  color: hasPremium ? Colors.amber : Colors.grey,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  hasPremium ? "Premium Activo" : "Versión Gratuita",
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color:
+                        hasPremium
+                            ? Colors.amber.shade800
+                            : Colors.grey.shade700,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+
+            if (hasPremium) ...[
+              premiumAsync.when(
+                data:
+                    (subscription) => Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          "Suscripción: ${subscription.productType?.name.toUpperCase() ?? 'DESCONOCIDA'}",
+                          style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        if (subscription.daysRemaining > 0)
+                          Text(
+                            "Días restantes: ${subscription.daysRemaining}",
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: Colors.grey.shade600,
+                            ),
+                          ),
+                        const SizedBox(height: 16),
+                        const Text(
+                          "Beneficios activos:",
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        const SizedBox(height: 8),
+                        _buildPremiumBenefit(
+                          icon: Icons.audiotrack,
+                          title: "Audio de Alta Calidad",
+                          description: "Grabación en stereo 44.1kHz @ 192kbps",
+                        ),
+                        _buildPremiumBenefit(
+                          icon: Icons.gps_fixed,
+                          title: "GPS de Precisión Máxima",
+                          description: "Ubicación con precisión centimétrica",
+                        ),
+                        _buildPremiumBenefit(
+                          icon: Icons.update,
+                          title: "Actualizaciones Frecuentes",
+                          description: "Ubicación cada 10 segundos",
+                        ),
+                      ],
+                    ),
+                loading: () => const CircularProgressIndicator(),
+                error:
+                    (_, __) =>
+                        const Text("Error al cargar información premium"),
+              ),
+            ] else ...[
+              const Text(
+                "Mejora a Premium para acceder a:",
+                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+              ),
+              const SizedBox(height: 12),
+              _buildPremiumBenefit(
+                icon: Icons.audiotrack,
+                title: "Audio de Alta Calidad",
+                description: "Grabación en stereo 44.1kHz @ 192kbps",
+                enabled: false,
+              ),
+              _buildPremiumBenefit(
+                icon: Icons.gps_fixed,
+                title: "GPS de Precisión Máxima",
+                description: "Ubicación con precisión centimétrica",
+                enabled: false,
+              ),
+              _buildPremiumBenefit(
+                icon: Icons.update,
+                title: "Actualizaciones Frecuentes",
+                description: "Ubicación cada 10 segundos",
+                enabled: false,
+              ),
+              const SizedBox(height: 16),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  icon: const Icon(Icons.star),
+                  label: const Text("Obtener Premium"),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.amber,
+                    foregroundColor: Colors.black,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const RemoveAdsScreen(),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPremiumBenefit({
+    required IconData icon,
+    required String title,
+    required String description,
+    bool enabled = true,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4.0),
+      child: Row(
+        children: [
+          Icon(icon, color: enabled ? Colors.green : Colors.grey, size: 20),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: TextStyle(
+                    fontWeight: FontWeight.w500,
+                    color: enabled ? Colors.black : Colors.grey,
+                  ),
+                ),
+                Text(
+                  description,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color:
+                        enabled ? Colors.grey.shade600 : Colors.grey.shade400,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (enabled) Icon(Icons.check_circle, color: Colors.green, size: 16),
+        ],
       ),
     );
   }

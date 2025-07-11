@@ -7,14 +7,32 @@ import 'package:flutter/foundation.dart';
 import '../../domain/providers/providers.dart';
 import '../../core/services/permission_service.dart';
 import '../../core/services/background_service.dart';
+import '../../core/services/iap_service.dart';
+import '../../core/services/telegram_service.dart';
+import '../../core/services/location_service.dart';
+import '../../core/services/audio_service.dart';
+import '../../core/services/debug_logger.dart';
+import '../screens/settings_screen.dart';
 
 class AlertButton extends ConsumerWidget {
   const AlertButton({super.key});
+
+  static const String _tag = 'AlertButton';
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final alertStatus = ref.watch(alertStatusProvider);
     final isActive = alertStatus.isActive;
+
+    // Logging detallado del estado
+    final debugLogger = DebugLogger.instance;
+    debugLogger.debug(_tag, 'Verificando estado de acceso...');
+    final iapService = IAPService.instance;
+    debugLogger.debug(_tag, 'hasPremium: ${iapService.hasPremium}');
+    debugLogger.debug(_tag, 'isInTrial: ${iapService.isInTrial}');
+
+    final hasAccess = iapService.hasPremium || iapService.isInTrial;
+    debugLogger.info(_tag, 'Acceso final calculado: $hasAccess');
 
     return Container(
       height: 100,
@@ -64,6 +82,30 @@ class AlertButton extends ConsumerWidget {
   }
 
   void _startAlert(BuildContext context, WidgetRef ref) async {
+    final debugLogger = DebugLogger.instance;
+    debugLogger.info(_tag, 'Iniciando proceso de alerta...');
+
+    // 🔥 VERIFICAR PREMIUM O TRIAL ANTES DE CONTINUAR
+    final iapService = IAPService.instance;
+    final hasPremium = iapService.hasPremium;
+    final isInTrial = iapService.isInTrial;
+
+    debugLogger.debug(_tag, 'Verificando acceso...');
+    debugLogger.debug(_tag, 'hasPremium: $hasPremium');
+    debugLogger.debug(_tag, 'isInTrial: $isInTrial');
+
+    // ✅ Permitir si tiene premium O está en trial
+    final canUseAlert = hasPremium || isInTrial;
+    debugLogger.info(_tag, 'Acceso calculado: $canUseAlert');
+
+    if (!canUseAlert) {
+      debugLogger.warning(_tag, 'Acceso denegado, mostrando diálogo premium');
+      _showPremiumRequiredDialog(context, ref);
+      return;
+    }
+
+    debugLogger.success(_tag, 'Acceso permitido, continuando...');
+
     // Verificar específicamente el permiso de micrófono primero
     final permissionService = ref.read(permissionServiceProvider);
     final micStatus = await permissionService.requestMicrophonePermission();
@@ -395,6 +437,98 @@ class AlertButton extends ConsumerWidget {
               ),
             ],
           ),
+    );
+  }
+
+  /// Diálogo para informar que se necesita premium después de los 7 días
+  void _showPremiumRequiredDialog(BuildContext context, WidgetRef ref) {
+    final debugLogger = DebugLogger.instance;
+    debugLogger.info(_tag, 'Mostrando diálogo premium');
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder:
+          (context) => AlertDialog(
+            title: Row(
+              children: [
+                Icon(Icons.diamond, color: Colors.amber, size: 24),
+                const SizedBox(width: 8),
+                const Text('Premium Requerido'),
+              ],
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Tu período de prueba gratuita de 7 días ha terminado.',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  'Para seguir usando la función de alerta de emergencia, necesitas suscribirte a Premium.',
+                  style: TextStyle(fontSize: 14),
+                ),
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.blue.shade200),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Premium incluye:',
+                        style: TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                      const SizedBox(height: 8),
+                      _buildFeatureItem('🚨 Alertas de emergencia ilimitadas'),
+                      _buildFeatureItem('📍 GPS de alta precisión'),
+                      _buildFeatureItem('🎙️ Audio de alta calidad'),
+                      _buildFeatureItem('📸 Captura de fotos automática'),
+                      _buildFeatureItem('🔒 Soporte prioritario'),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Después'),
+              ),
+              ElevatedButton(
+                onPressed: () {
+                  Navigator.pop(context);
+                  // Navegar a la pantalla de compras
+                  Navigator.pushNamed(context, '/remove_ads');
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.blue,
+                  foregroundColor: Colors.white,
+                ),
+                child: const Text('Ver Planes Premium'),
+              ),
+            ],
+          ),
+    );
+  }
+
+  /// Widget auxiliar para mostrar características de premium
+  Widget _buildFeatureItem(String feature) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('• ', style: TextStyle(color: Colors.blue)),
+          Expanded(child: Text(feature, style: const TextStyle(fontSize: 13))),
+        ],
+      ),
     );
   }
 }

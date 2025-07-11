@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:uni_links/uni_links.dart';
+import 'package:app_links/app_links.dart';
 import 'dart:async';
 import 'dart:io';
 import 'dart:ui';
@@ -9,6 +9,10 @@ import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart';
 
 import 'presentation/screens/home_screen.dart';
+import 'presentation/screens/trial_screen.dart';
+import 'presentation/screens/settings_screen.dart';
+import 'presentation/screens/onboarding_screen.dart';
+import 'presentation/screens/remove_ads_screen.dart';
 import 'domain/providers/providers.dart';
 import 'core/constants/app_constants.dart';
 import 'core/services/background_service.dart';
@@ -76,11 +80,13 @@ class MyApp extends ConsumerStatefulWidget {
 
 class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
   StreamSubscription? _linkSubscription;
+  late AppLinks _appLinks;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _appLinks = AppLinks();
     _initURIHandler();
     _initLinksStream();
   }
@@ -100,7 +106,7 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
     if (!_initialURIHandled) {
       _initialURIHandled = true;
       try {
-        final initialURI = await getInitialUri();
+        final initialURI = await _appLinks.getInitialLink();
         if (initialURI != null) {
           _handleURI(initialURI);
         }
@@ -118,7 +124,7 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
     // Solo continuar si estamos en iOS
     if (!Platform.isIOS) return;
 
-    _linkSubscription = uriLinkStream.listen(
+    _linkSubscription = _appLinks.uriLinkStream.listen(
       (Uri? uri) {
         if (uri != null) {
           _handleURI(uri);
@@ -186,6 +192,25 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
     }
   }
 
+  /// Construir pantalla inicial basada en el estado del onboarding
+  Widget _buildInitialScreen() {
+    final onboardingCompleted = ref.watch(isOnboardingCompletedProvider);
+
+    return onboardingCompleted.when(
+      data: (completed) {
+        if (completed) {
+          return const HomeScreen();
+        } else {
+          return const OnboardingScreen();
+        }
+      },
+      loading: () => const SplashScreen(),
+      error:
+          (_, __) =>
+              const OnboardingScreen(), // En caso de error, mostrar onboarding
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     // Observar el estado de inicialización
@@ -212,10 +237,18 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
           ),
         ),
       ),
+      routes: {
+        '/home': (context) => const HomeScreen(),
+        '/onboarding': (context) => const OnboardingScreen(),
+        '/trial': (context) => const TrialScreen(),
+        '/settings': (context) => const SettingsScreen(),
+        '/remove_ads': (context) => const RemoveAdsScreen(),
+      },
       home: appInitialization.when(
         data: (initialized) {
           if (initialized) {
-            return const HomeScreen();
+            // Verificar si es el primer lanzamiento
+            return _buildInitialScreen();
           } else {
             return InitErrorScreen(
               onRetry: () => ref.refresh(appInitializationProvider),

@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Política de Privacidad - Alerta Telegram</title>
+    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Nunito', sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .header {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 20px;
+            padding: 30px;
+            text-align: center;
+            margin-bottom: 30px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+            backdrop-filter: blur(10px);
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            font-weight: 800;
+            color: #1976d2;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .header .subtitle {
+            font-size: 1.2em;
+            color: #666;
+            margin-bottom: 20px;
+        }
+
+        .header .app-name {
+            font-size: 1.5em;
+            font-weight: 700;
+            color: #1976d2;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+
+        .header .app-name i {
+            font-size: 1.8em;
+            color: #ff6b6b;
+        }
+
+        .last-updated {
+            background: rgba(255, 255, 255, 0.9);
+            border-radius: 15px;
+            padding: 15px;
+            text-align: center;
+            margin-bottom: 30px;
+            border-left: 4px solid #1976d2;
+        }
+
+        .last-updated p {
+            font-style: italic;
+            color: #666;
+            font-size: 0.9em;
+        }
+
+        .section {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 20px;
+            padding: 30px;
+            margin-bottom: 25px;
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
+            backdrop-filter: blur(10px);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .section:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.15);
+        }
+
+        .section h2 {
+            font-size: 1.8em;
+            font-weight: 700;
+            color: #1976d2;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .section h2 i {
+            font-size: 1.2em;
+            color: #ff6b6b;
+        }
+
+        .section p {
+            font-size: 1.1em;
+            line-height: 1.8;
+            color: #555;
+            margin-bottom: 15px;
+        }
+
+        .section ul {
+            list-style: none;
+            padding-left: 0;
+        }
+
+        .section ul li {
+            padding: 8px 0;
+            padding-left: 30px;
+            position: relative;
+            font-size: 1.1em;
+            line-height: 1.6;
+            color: #555;
+        }
+
+        .section ul li::before {
+            content: "•";
+            color: #1976d2;
+            font-weight: bold;
+            position: absolute;
+            left: 10px;
+            font-size: 1.2em;
+        }
+
+        .intro-section {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .intro-section h2 {
+            color: white;
+        }
+
+        .intro-section p {
+            color: rgba(255, 255, 255, 0.9);
+            font-size: 1.2em;
+        }
+
+        .security-section {
+            background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+            color: white;
+        }
+
+        .security-section h2 {
+            color: white;
+        }
+
+        .security-section p {
+            color: rgba(255, 255, 255, 0.9);
+        }
+
+        .contact-section {
+            background: linear-gradient(135deg, #ff6b6b 0%, #ffa500 100%);
+            color: white;
+            text-align: center;
+        }
+
+        .contact-section h2 {
+            color: white;
+            justify-content: center;
+        }
+
+        .contact-section p {
+            color: rgba(255, 255, 255, 0.9);
+            font-size: 1.2em;
+        }
+
+        .footer {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 20px;
+            padding: 30px;
+            text-align: center;
+            margin-top: 40px;
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
+            backdrop-filter: blur(10px);
+        }
+
+        .footer p {
+            color: #666;
+            font-size: 0.9em;
+        }
+
+        .footer .heart {
+            color: #ff6b6b;
+            font-size: 1.2em;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+            100% { transform: scale(1); }
+        }
+
+        .scroll-to-top {
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+            background: #1976d2;
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            font-size: 1.2em;
+            cursor: pointer;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+            transition: all 0.3s ease;
+            opacity: 0;
+            visibility: hidden;
+        }
+
+        .scroll-to-top.visible {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        .scroll-to-top:hover {
+            background: #1565c0;
+            transform: translateY(-3px);
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+        }
+
+        .navigation {
+            background: rgba(255, 255, 255, 0.9);
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 30px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+        }
+
+        .navigation h3 {
+            color: #1976d2;
+            margin-bottom: 15px;
+            font-size: 1.3em;
+        }
+
+        .navigation ul {
+            list-style: none;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 10px;
+        }
+
+        .navigation ul li {
+            padding: 0;
+        }
+
+        .navigation ul li a {
+            color: #555;
+            text-decoration: none;
+            padding: 8px 15px;
+            border-radius: 8px;
+            transition: all 0.3s ease;
+            display: block;
+        }
+
+        .navigation ul li a:hover {
+            background: #1976d2;
+            color: white;
+            transform: translateX(5px);
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 15px;
+            }
+
+            .header h1 {
+                font-size: 2em;
+            }
+
+            .header .app-name {
+                font-size: 1.3em;
+            }
+
+            .section {
+                padding: 20px;
+            }
+
+            .section h2 {
+                font-size: 1.5em;
+            }
+
+            .navigation ul {
+                grid-template-columns: 1fr;
+            }
+
+            .scroll-to-top {
+                bottom: 20px;
+                right: 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <div class="header">
+            <h1><i class="fas fa-shield-alt"></i> Política de Privacidad</h1>
+            <div class="app-name">
+                <i class="fas fa-paper-plane"></i>
+                Alerta Telegram
+            </div>
+            <p class="subtitle">Tu privacidad es nuestra prioridad</p>
+        </div>
+
+        <!-- Última actualización -->
+        <div class="last-updated">
+            <p><i class="fas fa-calendar-alt"></i> Última actualización: Diciembre 2024</p>
+        </div>
+
+        <!-- Navegación -->
+        <div class="navigation">
+            <h3><i class="fas fa-list"></i> Índice de contenidos</h3>
+            <ul>
+                <li><a href="#introduccion">Introducción</a></li>
+                <li><a href="#informacion-recopilamos">Información que recopilamos</a></li>
+                <li><a href="#como-usamos">Cómo usamos su información</a></li>
+                <li><a href="#compartir-informacion">Compartir información</a></li>
+                <li><a href="#almacenamiento">Almacenamiento de datos</a></li>
+                <li><a href="#seguridad">Seguridad</a></li>
+                <li><a href="#sus-derechos">Sus derechos</a></li>
+                <li><a href="#menores-edad">Menores de edad</a></li>
+                <li><a href="#cambios">Cambios a esta política</a></li>
+            </ul>
+        </div>
+
+        <!-- Introducción -->
+        <div class="section intro-section" id="introduccion">
+            <h2><i class="fas fa-info-circle"></i> Introducción</h2>
+            <p>En Alerta Telegram, respetamos su privacidad y estamos comprometidos con la protección de sus datos personales. Esta política explica cómo recopilamos, usamos y protegemos su información.</p>
+        </div>
+
+        <!-- Información que recopilamos -->
+        <div class="section" id="informacion-recopilamos">
+            <h2><i class="fas fa-database"></i> 1. Información que Recopilamos</h2>
+            <ul>
+                <li>Datos de ubicación GPS cuando se activa una alerta</li>
+                <li>Tokens de bot de Telegram para el funcionamiento del servicio</li>
+                <li>Información de contactos de emergencia (nombres y Chat IDs)</li>
+                <li>Datos técnicos para el funcionamiento de la aplicación</li>
+            </ul>
+        </div>
+
+        <!-- Cómo usamos su información -->
+        <div class="section" id="como-usamos">
+            <h2><i class="fas fa-cogs"></i> 2. Cómo Usamos su Información</h2>
+            <p>Utilizamos su información exclusivamente para:</p>
+            <ul>
+                <li>Enviar alertas de emergencia a sus contactos</li>
+                <li>Proporcionar servicios de ubicación en tiempo real</li>
+                <li>Mejorar la funcionalidad de la aplicación</li>
+                <li>Garantizar el correcto funcionamiento del servicio</li>
+            </ul>
+        </div>
+
+        <!-- Compartir información -->
+        <div class="section" id="compartir-informacion">
+            <h2><i class="fas fa-share-alt"></i> 3. Compartir Información</h2>
+            <p>No vendemos, alquilamos ni compartimos su información personal con terceros, excepto:</p>
+            <ul>
+                <li>Con sus contactos de emergencia cuando activa una alerta</li>
+                <li>Cuando sea requerido por ley</li>
+                <li>Con proveedores de servicios necesarios para el funcionamiento</li>
+            </ul>
+        </div>
+
+        <!-- Almacenamiento de datos -->
+        <div class="section" id="almacenamiento">
+            <h2><i class="fas fa-server"></i> 4. Almacenamiento de Datos</h2>
+            <p>Sus datos se almacenan localmente en su dispositivo y se transmiten únicamente cuando es necesario para el funcionamiento del servicio. No mantenemos servidores centrales con su información personal.</p>
+        </div>
+
+        <!-- Seguridad -->
+        <div class="section security-section" id="seguridad">
+            <h2><i class="fas fa-lock"></i> 5. Seguridad</h2>
+            <p>Implementamos medidas de seguridad técnicas y organizacionales para proteger su información contra acceso no autorizado, alteración, divulgación o destrucción.</p>
+        </div>
+
+        <!-- Sus derechos -->
+        <div class="section" id="sus-derechos">
+            <h2><i class="fas fa-user-shield"></i> 6. Sus Derechos</h2>
+            <p>Usted tiene derecho a:</p>
+            <ul>
+                <li>Acceder a su información personal</li>
+                <li>Corregir datos inexactos</li>
+                <li>Eliminar sus datos</li>
+                <li>Limitar el procesamiento</li>
+                <li>Portabilidad de datos</li>
+            </ul>
+        </div>
+
+        <!-- Menores de edad -->
+        <div class="section" id="menores-edad">
+            <h2><i class="fas fa-child"></i> 7. Menores de Edad</h2>
+            <p>Esta aplicación no está dirigida a menores de 13 años. No recopilamos conscientemente información personal de menores de 13 años.</p>
+        </div>
+
+        <!-- Cambios a esta política -->
+        <div class="section" id="cambios">
+            <h2><i class="fas fa-edit"></i> 8. Cambios a esta Política</h2>
+            <p>Podemos actualizar esta política de privacidad ocasionalmente. Le notificaremos sobre cambios importantes publicando la nueva política en la aplicación.</p>
+        </div>
+
+        <!-- Sección de contacto -->
+        <div class="section contact-section">
+            <h2><i class="fas fa-envelope"></i> Privacidad Garantizada</h2>
+            <p>Tu privacidad es nuestra prioridad. Si tienes preguntas sobre cómo manejamos tu información, no dudes en contactarnos.</p>
+        </div>
+
+        <!-- Footer -->
+        <div class="footer">
+            <p>© 2024 Alerta Telegram. Hecho con <span class="heart">❤️</span> para tu seguridad.</p>
+            <p>Esta política de privacidad está diseñada para ser transparente y fácil de entender.</p>
+        </div>
+    </div>
+
+    <!-- Botón scroll to top -->
+    <button class="scroll-to-top" onclick="scrollToTop()">
+        <i class="fas fa-chevron-up"></i>
+    </button>
+
+    <script>
+        // Mostrar/ocultar botón scroll to top
+        window.onscroll = function() {
+            const scrollBtn = document.querySelector('.scroll-to-top');
+            if (document.body.scrollTop > 20 || document.documentElement.scrollTop > 20) {
+                scrollBtn.classList.add('visible');
+            } else {
+                scrollBtn.classList.remove('visible');
+            }
+        };
+
+        // Función scroll to top
+        function scrollToTop() {
+            document.body.scrollTop = 0;
+            document.documentElement.scrollTop = 0;
+        }
+
+        // Smooth scroll para los enlaces de navegación
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                if (target) {
+                    target.scrollIntoView({
+                        behavior: 'smooth',
+                        block: 'start'
+                    });
+                }
+            });
+        });
+
+        // Efecto parallax suave
+        window.addEventListener('scroll', () => {
+            const scrolled = window.pageYOffset;
+            const parallax = document.querySelector('body');
+            const speed = scrolled * 0.5;
+            parallax.style.transform = `translateY(${speed}px)`;
+        });
+    </script>
+</body>
+</html>

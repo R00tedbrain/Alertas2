@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:io' show Platform;
 import 'dart:async';
 import 'package:flutter/services.dart';
@@ -11,11 +12,13 @@ import '../../core/services/audio_service.dart';
 import '../../core/services/background_service.dart';
 import '../../core/services/camera_service.dart';
 import '../../core/services/config_service.dart';
+import '../../core/services/iap_service.dart';
 import '../../core/services/location_service.dart';
 import '../../core/services/permission_service.dart';
 import '../../core/services/telegram_service.dart';
 import '../../data/models/app_config.dart';
 import '../../data/models/emergency_contact.dart';
+import '../../data/models/purchase_state.dart';
 
 // Providers de Servicios
 final configServiceProvider = Provider<ConfigService>((ref) => ConfigService());
@@ -33,6 +36,7 @@ final telegramServiceProvider = Provider<TelegramService>(
 final backgroundServiceProvider = Provider<BackgroundAlertService>(
   (ref) => BackgroundAlertService(),
 );
+final iapServiceProvider = Provider<IAPService>((ref) => IAPService.instance);
 
 // Provider para verificar el token de Telegram
 final verifyTelegramTokenProvider = FutureProvider.autoDispose<bool>((
@@ -142,6 +146,24 @@ final appInitializationProvider = FutureProvider<bool>((ref) async {
     } catch (e) {
       print('Error al inicializar TelegramService: $e');
       failedServices.add('Telegram');
+      // No fallamos toda la app por esto
+    }
+
+    // Inicializar servicio de IAP
+    try {
+      final iapService = ref.read(iapServiceProvider);
+      final iapInitialized = await iapService.initialize();
+
+      if (iapInitialized) {
+        initializedServices.add('IAP');
+        print('✅ Servicio IAP inicializado correctamente');
+      } else {
+        failedServices.add('IAP (tienda no disponible)');
+        print('⚠️ Servicio IAP no disponible en este dispositivo');
+      }
+    } catch (e) {
+      print('Error al inicializar IAP Service: $e');
+      failedServices.add('IAP');
       // No fallamos toda la app por esto
     }
 
@@ -544,3 +566,243 @@ class AlertStatusNotifier extends StateNotifier<AlertStatus> {
     state = state.copyWith(statusMessage: message);
   }
 }
+
+// ====== PROVIDERS DE IN-APP PURCHASES ======
+
+/// Provider para inicializar el servicio de IAP
+final iapInitializationProvider = FutureProvider<bool>((ref) async {
+  final iapService = ref.read(iapServiceProvider);
+  return await iapService.initialize();
+});
+
+/// Provider para obtener el estado de la suscripción premium
+final premiumSubscriptionProvider = StreamProvider<PremiumSubscription>((ref) {
+  final iapService = ref.read(iapServiceProvider);
+  return iapService.subscriptionStream;
+});
+
+/// Provider para obtener productos disponibles
+final availableProductsProvider = FutureProvider<List<IAPProduct>>((ref) async {
+  final iapService = ref.read(iapServiceProvider);
+
+  // Asegurar que el servicio esté inicializado
+  await ref.read(iapInitializationProvider.future);
+
+  return iapService.availableProducts;
+});
+
+/// Provider para obtener el producto mensual
+final monthlyProductProvider = FutureProvider<IAPProduct?>((ref) async {
+  final iapService = ref.read(iapServiceProvider);
+
+  // Asegurar que el servicio esté inicializado
+  await ref.read(iapInitializationProvider.future);
+
+  return iapService.monthlyProduct;
+});
+
+/// Provider para obtener el producto anual
+final yearlyProductProvider = FutureProvider<IAPProduct?>((ref) async {
+  final iapService = ref.read(iapServiceProvider);
+
+  // Asegurar que el servicio esté inicializado
+  await ref.read(iapInitializationProvider.future);
+
+  return iapService.yearlyProduct;
+});
+
+/// Provider para verificar si el usuario tiene premium
+final hasPremiumProvider = Provider<bool>((ref) {
+  final subscriptionAsync = ref.watch(premiumSubscriptionProvider);
+
+  return subscriptionAsync.when(
+    data: (subscription) => subscription.isValid,
+    loading: () => false,
+    error: (_, __) => false,
+  );
+});
+
+/// Provider para obtener días restantes de suscripción
+final premiumDaysRemainingProvider = Provider<int>((ref) {
+  final subscriptionAsync = ref.watch(premiumSubscriptionProvider);
+
+  return subscriptionAsync.when(
+    data: (subscription) => subscription.daysRemaining,
+    loading: () => 0,
+    error: (_, __) => 0,
+  );
+});
+
+/// Provider para manejar compras
+final purchaseProvider = StateNotifierProvider<PurchaseNotifier, PurchaseState>(
+  (ref) {
+    final iapService = ref.read(iapServiceProvider);
+    return PurchaseNotifier(iapService);
+  },
+);
+
+/// Notifier para manejar las compras
+class PurchaseNotifier extends StateNotifier<PurchaseState> {
+  final IAPService _iapService;
+
+  PurchaseNotifier(this._iapService) : super(PurchaseState.none);
+
+  /// Iniciar prueba gratuita de 7 días
+  Future<bool> startTrial() async {
+    state = PurchaseState.pending;
+
+    try {
+      final success = await _iapService.purchaseProduct('7_day_trial');
+
+      if (!success) {
+        state = PurchaseState.error;
+        return false;
+      }
+
+      // El estado se actualizará automáticamente a través del stream
+      return true;
+    } catch (e) {
+      state = PurchaseState.error;
+      return false;
+    }
+  }
+
+  /// Comprar producto mensual
+  Future<bool> purchaseMonthly() async {
+    state = PurchaseState.pending;
+
+    try {
+      final success = await _iapService.purchaseProduct('premium_monthly');
+
+      if (!success) {
+        state = PurchaseState.error;
+        return false;
+      }
+
+      // El estado se actualizará automáticamente a través del stream
+      return true;
+    } catch (e) {
+      state = PurchaseState.error;
+      return false;
+    }
+  }
+
+  /// Comprar producto anual
+  Future<bool> purchaseYearly() async {
+    state = PurchaseState.pending;
+
+    try {
+      final success = await _iapService.purchaseProduct('premium_yearly');
+
+      if (!success) {
+        state = PurchaseState.error;
+        return false;
+      }
+
+      // El estado se actualizará automáticamente a través del stream
+      return true;
+    } catch (e) {
+      state = PurchaseState.error;
+      return false;
+    }
+  }
+
+  /// Restaurar compras
+  Future<bool> restorePurchases() async {
+    state = PurchaseState.pending;
+
+    try {
+      final success = await _iapService.restorePurchases();
+
+      if (!success) {
+        state = PurchaseState.error;
+        return false;
+      }
+
+      // El estado se actualizará automáticamente a través del stream
+      return true;
+    } catch (e) {
+      state = PurchaseState.error;
+      return false;
+    }
+  }
+
+  /// Resetear estado
+  void resetState() {
+    state = PurchaseState.none;
+  }
+}
+
+/// Provider para verificar si el usuario puede usar la prueba gratuita
+final canUseTrialProvider = FutureProvider<bool>((ref) async {
+  final iapService = ref.read(iapServiceProvider);
+  final hasUsedTrial = await iapService.hasUsedTrial();
+  final isCurrentlyInTrial = iapService.isInTrial;
+
+  // Puede usar trial si no la ha usado y no está actualmente en una
+  return !hasUsedTrial && !isCurrentlyInTrial;
+});
+
+/// Provider para obtener el producto de prueba gratuita
+final trialProductProvider = FutureProvider<IAPProduct?>((ref) async {
+  final iapService = ref.read(iapServiceProvider);
+
+  // Asegurar que el servicio esté inicializado
+  await ref.read(iapInitializationProvider.future);
+
+  return iapService.trialProduct;
+});
+
+/// Provider para verificar si el onboarding ya se completó
+final isOnboardingCompletedProvider = FutureProvider<bool>((ref) async {
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool('onboarding_completed') ?? false;
+  } catch (e) {
+    print('Error verificando onboarding completado: $e');
+    return false; // En caso de error, mostrar onboarding
+  }
+});
+
+/// Provider para marcar el onboarding como completado
+final onboardingNotifierProvider = Provider<OnboardingNotifier>((ref) {
+  return OnboardingNotifier();
+});
+
+class OnboardingNotifier {
+  /// Marcar onboarding como completado
+  Future<void> markOnboardingCompleted() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('onboarding_completed', true);
+      print('Onboarding marcado como completado');
+    } catch (e) {
+      print('Error al marcar onboarding como completado: $e');
+    }
+  }
+
+  /// Resetear onboarding (para testing)
+  Future<void> resetOnboarding() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('onboarding_completed', false);
+      print('Onboarding reseteado');
+    } catch (e) {
+      print('Error al resetear onboarding: $e');
+    }
+  }
+}
+
+/// Provider para verificar si el usuario está en período de prueba
+final isInTrialProvider = Provider<bool>((ref) {
+  final subscriptionAsync = ref.watch(premiumSubscriptionProvider);
+
+  return subscriptionAsync.when(
+    data:
+        (subscription) =>
+            subscription.isValid &&
+            subscription.productType == ProductType.trial,
+    loading: () => false,
+    error: (_, __) => false,
+  );
+});

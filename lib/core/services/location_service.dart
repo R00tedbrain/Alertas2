@@ -3,6 +3,8 @@ import 'package:logger/logger.dart';
 import 'dart:async';
 import 'dart:io' show Platform;
 
+import 'iap_service.dart';
+
 @pragma('vm:entry-point')
 class LocationService {
   // Logger
@@ -114,10 +116,29 @@ class LocationService {
           }
         }
 
-        // Comportamiento estándar (para Android u otros casos)
+        // Comportamiento estándar con configuración premium
+        final bool hasPremium = IAPService.instance.hasPremium;
+
+        final LocationAccuracy accuracy =
+            hasPremium
+                ? LocationAccuracy
+                    .best // Premium: Máxima precisión
+                : LocationAccuracy.high; // Normal: Alta precisión
+
+        final Duration timeLimit =
+            hasPremium
+                ? const Duration(
+                  seconds: 15,
+                ) // Premium: Más tiempo para mayor precisión
+                : const Duration(seconds: 10); // Normal: Tiempo estándar
+
+        _logger.d(
+          'Configuración de ubicación - Premium: $hasPremium, Precisión: $accuracy, Timeout: ${timeLimit.inSeconds}s',
+        );
+
         final position = await Geolocator.getCurrentPosition(
-          desiredAccuracy: LocationAccuracy.high,
-          timeLimit: const Duration(seconds: 10),
+          desiredAccuracy: accuracy,
+          timeLimit: timeLimit,
         );
 
         return position;

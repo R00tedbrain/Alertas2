@@ -14,6 +14,7 @@ Sistema de alertas de emergencia que envía ubicación, audio y fotos a contacto
 - **🎤 Grabaciones de Audio**: Envío automático cada 30 segundos en segundo plano
 - **📍 Ubicación en Tiempo Real**: Actualización continua de posición GPS
 - **📷 Fotos de Emergencia**: Captura de cámaras frontal y trasera cada 20 segundos
+- **🗺️ Mapa Interactivo**: Mapa clickeable con pantalla completa y actualización cada 10 segundos
 - **🤖 Integración Telegram**: Envío directo a través de bot personalizado
 - **⚡ Funcionamiento en Background**: Continúa funcionando aunque la app esté cerrada
 
@@ -152,6 +153,7 @@ Emergency alert system that sends location, audio, and photos to Telegram contac
 - **🎤 Audio Recordings**: Automatic sending every 30 seconds in background
 - **📍 Real-time Location**: Continuous GPS position updates
 - **📷 Emergency Photos**: Front and rear camera capture every 20 seconds
+- **🗺️ Interactive Map**: Clickable map with full screen and 10-second updates
 - **🤖 Telegram Integration**: Direct sending through custom bot
 - **⚡ Background Operation**: Continues working even when app is closed
 

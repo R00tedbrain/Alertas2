@@ -8,6 +8,8 @@ import 'package:logger/logger.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:flutter/services.dart';
 
+import 'iap_service.dart';
+
 /// Servicio para grabación de audio
 class AudioService {
   final Logger _logger = Logger();
@@ -423,12 +425,21 @@ class AudioService {
         await Future.delayed(const Duration(milliseconds: 500));
       }
 
-      // Configurar el codificador y bitrate apropiados para AAC
-      const sampleRate = 44100;
-      const numChannels = 1; // Mono para mejor calidad de voz
-      const bitRate = 96000; // Mayor bitrate para mejor calidad
+      // Configurar calidad de audio basada en suscripción premium
+      final bool hasPremium = IAPService.instance.hasPremium;
 
-      // Iniciar grabación con parámetros optimizados
+      final int sampleRate =
+          hasPremium ? 44100 : 22050; // Premium: 44.1kHz, Normal: 22kHz
+      final int numChannels =
+          hasPremium ? 2 : 1; // Premium: Stereo, Normal: Mono
+      final int bitRate =
+          hasPremium ? 192000 : 96000; // Premium: 192kbps, Normal: 96kbps
+
+      _logger.d(
+        'Configuración de audio - Premium: $hasPremium, SampleRate: $sampleRate, Channels: $numChannels, BitRate: $bitRate',
+      );
+
+      // Iniciar grabación con parámetros optimizados según suscripción
       await _recorder!.startRecorder(
         toFile: filePath,
         codec: Codec.aacADTS,

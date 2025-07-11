@@ -7,6 +7,7 @@ import '../screens/terms_of_use_screen.dart';
 import '../screens/privacy_policy_screen.dart';
 import '../screens/remove_ads_screen.dart';
 import '../screens/my_location_screen.dart';
+import '../screens/debug_console_screen.dart';
 
 class AppDrawer extends StatelessWidget {
   const AppDrawer({super.key});
@@ -78,9 +79,9 @@ class AppDrawer extends StatelessWidget {
 
                   _buildDrawerItem(
                     context,
-                    icon: Icons.star_outline,
-                    title: 'Eliminar Anuncios',
-                    subtitle: 'Disfruta sin interrupciones',
+                    icon: Icons.diamond_outlined,
+                    title: 'Suscripciones Premium',
+                    subtitle: 'Planes y funciones premium',
                     onTap: () {
                       Navigator.of(context).pop();
                       Navigator.push(
@@ -106,6 +107,23 @@ class AppDrawer extends StatelessWidget {
                         context,
                         MaterialPageRoute(
                           builder: (context) => const MyLocationScreen(),
+                        ),
+                      );
+                    },
+                  ),
+
+                  // Debug Console siempre disponible (temporal para diagnosticar IAP)
+                  _buildDrawerItem(
+                    context,
+                    icon: Icons.terminal,
+                    title: 'Debug Console',
+                    subtitle: 'Ver logs de la aplicación',
+                    onTap: () {
+                      Navigator.of(context).pop();
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const DebugConsoleScreen(),
                         ),
                       );
                     },

@@ -21,6 +21,8 @@ class _MyLocationScreenState extends ConsumerState<MyLocationScreen> {
   StreamSubscription<Position>? _positionSubscription;
   Position? _currentPosition;
   bool _isMapReady = false;
+  DateTime? _lastUpdateTime;
+  Timer? _updateTimer;
 
   // Configuración del mapa
   static const LatLng _initialCenter = LatLng(
@@ -39,6 +41,7 @@ class _MyLocationScreenState extends ConsumerState<MyLocationScreen> {
   @override
   void dispose() {
     _positionSubscription?.cancel();
+    _updateTimer?.cancel();
     _mapController?.dispose();
     super.dispose();
   }
@@ -50,6 +53,7 @@ class _MyLocationScreenState extends ConsumerState<MyLocationScreen> {
       if (position != null && mounted) {
         setState(() {
           _currentPosition = position;
+          _lastUpdateTime = DateTime.now();
         });
 
         if (_isMapReady && _mapController != null) {
@@ -62,16 +66,19 @@ class _MyLocationScreenState extends ConsumerState<MyLocationScreen> {
   }
 
   void _startLocationUpdates() {
+    // Actualizar cada 10 segundos para mejor precisión en emergencias
     _positionSubscription = Geolocator.getPositionStream(
       locationSettings: const LocationSettings(
         accuracy: LocationAccuracy.high,
-        distanceFilter: 10, // Actualizar cada 10 metros
+        distanceFilter: 5, // Actualizar cada 5 metros
+        timeLimit: Duration(seconds: 10), // Actualizar cada 10 segundos mínimo
       ),
     ).listen(
       (Position position) {
         if (mounted) {
           setState(() {
             _currentPosition = position;
+            _lastUpdateTime = DateTime.now();
           });
 
           if (_isMapReady && _mapController != null) {
@@ -83,6 +90,15 @@ class _MyLocationScreenState extends ConsumerState<MyLocationScreen> {
         print('Error en stream de ubicación: $error');
       },
     );
+
+    // Timer adicional para forzar actualización cada 10 segundos
+    _updateTimer = Timer.periodic(const Duration(seconds: 10), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+      _getCurrentLocation();
+    });
   }
 
   void _animateToCurrentPosition() {
@@ -103,79 +119,183 @@ class _MyLocationScreenState extends ConsumerState<MyLocationScreen> {
     }
   }
 
+  void _shareLocation() {
+    if (_currentPosition != null) {
+      final locationService = ref.read(locationServiceProvider);
+      final locationText = locationService.formatLocationMessage(
+        _currentPosition!,
+      );
+      final mapsLink = locationService.getGoogleMapsLink(_currentPosition!);
+
+      // Mostrar opciones de compartir
+      showModalBottomSheet(
+        context: context,
+        builder:
+            (context) => Container(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Compartir ubicación',
+                    style: GoogleFonts.nunito(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    '🚨 Mi ubicación de emergencia:\n\n$locationText\n\nVer en mapa: $mapsLink',
+                    style: GoogleFonts.nunito(fontSize: 14),
+                  ),
+                  const SizedBox(height: 16),
+                  ElevatedButton.icon(
+                    onPressed: () {
+                      // Aquí podrías integrar con share_plus plugin si lo necesitas
+                      Navigator.pop(context);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text(
+                            'Funcionalidad de compartir disponible',
+                          ),
+                          duration: Duration(seconds: 2),
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.share),
+                    label: const Text('Compartir'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.green,
+                      foregroundColor: Colors.white,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Mi Ubicación'),
-        backgroundColor: Colors.blue,
-        foregroundColor: Colors.white,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.my_location),
-            onPressed: _getCurrentLocation,
-            tooltip: 'Centrar en mi ubicación',
-          ),
-        ],
-      ),
-      body: Stack(
-        children: [
-          // Mapa principal
-          FlutterMap(
-            mapController: _mapController,
-            options: MapOptions(
-              initialCenter:
-                  _currentPosition != null
-                      ? LatLng(
-                        _currentPosition!.latitude,
-                        _currentPosition!.longitude,
-                      )
-                      : _initialCenter,
-              initialZoom: 15.0,
-              minZoom: 1.0,
-              maxZoom: 18.0,
-              interactionOptions: const InteractionOptions(
-                flags: InteractiveFlag.all & ~InteractiveFlag.rotate,
-              ),
-              onMapReady: _onMapReady,
-              onTap: (tapPosition, point) {
-                // Opcional: manejar taps en el mapa
+    return PopScope(
+      canPop: true,
+      onPopInvoked: (didPop) {
+        // Permitir volver atrás con el botón del sistema o gesto iOS
+        if (!didPop) {
+          Navigator.of(context).pop();
+        }
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('🚨 Mapa de Emergencia'),
+          backgroundColor: Colors.blue,
+          foregroundColor: Colors.white,
+          leading: Container(
+            margin: const EdgeInsets.all(8.0),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.2),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: IconButton(
+              icon: const Icon(Icons.arrow_back_ios, size: 18),
+              onPressed: () {
+                Navigator.of(context).pop();
               },
+              tooltip: 'Volver al inicio',
+              color: Colors.white,
             ),
-            children: [
-              TileLayer(
-                urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                userAgentPackageName: 'com.emergencia.alertaTelegram',
-                maxNativeZoom: 18,
-              ),
-              MarkerLayer(markers: _createMarkers()),
-            ],
           ),
-
-          // Información superior
-          Positioned(top: 16, left: 16, right: 16, child: _buildLocationInfo()),
-
-          // Botón flotante para centrar ubicación
-          Positioned(
-            bottom: 100,
-            right: 16,
-            child: FloatingActionButton(
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.refresh),
               onPressed: _getCurrentLocation,
-              backgroundColor: Colors.blue,
-              foregroundColor: Colors.white,
-              mini: true,
-              child: const Icon(Icons.my_location),
+              tooltip: 'Actualizar ubicación',
             ),
-          ),
+          ],
+          elevation: 4,
+          shadowColor: Colors.blue.withOpacity(0.3),
+        ),
+        body: Stack(
+          children: [
+            // Mapa principal
+            FlutterMap(
+              mapController: _mapController,
+              options: MapOptions(
+                initialCenter:
+                    _currentPosition != null
+                        ? LatLng(
+                          _currentPosition!.latitude,
+                          _currentPosition!.longitude,
+                        )
+                        : _initialCenter,
+                initialZoom: 15.0,
+                minZoom: 1.0,
+                maxZoom: 18.0,
+                interactionOptions: const InteractionOptions(
+                  flags: InteractiveFlag.all & ~InteractiveFlag.rotate,
+                ),
+                onMapReady: _onMapReady,
+                onTap: (tapPosition, point) {
+                  // Opcional: manejar taps en el mapa
+                },
+              ),
+              children: [
+                TileLayer(
+                  urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                  userAgentPackageName: 'com.emergencia.alertaTelegram',
+                  maxNativeZoom: 18,
+                ),
+                MarkerLayer(markers: _createMarkers()),
+              ],
+            ),
 
-          // Información inferior
-          Positioned(
-            bottom: 16,
-            left: 16,
-            right: 16,
-            child: _buildBottomInfo(),
-          ),
-        ],
+            // Información superior
+            Positioned(
+              top: 16,
+              left: 16,
+              right: 16,
+              child: _buildLocationInfo(),
+            ),
+
+            // Botones flotantes
+            Positioned(
+              bottom: 100,
+              right: 16,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Botón compartir ubicación
+                  FloatingActionButton(
+                    onPressed: _shareLocation,
+                    backgroundColor: Colors.green,
+                    foregroundColor: Colors.white,
+                    mini: true,
+                    child: const Icon(Icons.share_location),
+                  ),
+                  const SizedBox(height: 8),
+                  // Botón centrar ubicación
+                  FloatingActionButton(
+                    onPressed: _getCurrentLocation,
+                    backgroundColor: Colors.blue,
+                    foregroundColor: Colors.white,
+                    mini: true,
+                    child: const Icon(Icons.my_location),
+                  ),
+                ],
+              ),
+            ),
+
+            // Información inferior
+            Positioned(
+              bottom: 16,
+              left: 16,
+              right: 16,
+              child: _buildBottomInfo(),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -236,6 +356,11 @@ class _MyLocationScreenState extends ConsumerState<MyLocationScreen> {
               'Precisión:',
               '${_currentPosition!.accuracy.toStringAsFixed(0)}m',
             ),
+            if (_lastUpdateTime != null)
+              _buildInfoRow(
+                'Última actualización:',
+                _getTimeAgo(_lastUpdateTime!),
+              ),
           ] else ...[
             const Center(child: SpinKitPulse(color: Colors.blue, size: 30)),
           ],
@@ -284,16 +409,30 @@ class _MyLocationScreenState extends ConsumerState<MyLocationScreen> {
           const SizedBox(width: 12),
           Expanded(
             child: Text(
-              'Tu ubicación se actualiza en tiempo real. Esta información se usa para las alertas de emergencia.',
+              '🚨 Modo Emergencia: Actualización cada 10 segundos o 5 metros. Perfecta precisión para rutas de escape.',
               style: GoogleFonts.nunito(
                 fontSize: 12,
                 color: Colors.blue.shade800,
+                fontWeight: FontWeight.w600,
               ),
             ),
           ),
         ],
       ),
     );
+  }
+
+  String _getTimeAgo(DateTime time) {
+    final now = DateTime.now();
+    final difference = now.difference(time);
+
+    if (difference.inSeconds < 60) {
+      return '${difference.inSeconds}s';
+    } else if (difference.inMinutes < 60) {
+      return '${difference.inMinutes}m';
+    } else {
+      return '${difference.inHours}h';
+    }
   }
 
   List<Marker> _createMarkers() {

@@ -27,7 +27,7 @@
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>$(FLUTTER_BUILD_NAME)</string>
+	<string>11</string>
 	<key>CFBundleSignature</key>
 	<string>????</string>
 	<key>CFBundleURLTypes</key>
@@ -44,7 +44,7 @@
 		</dict>
 	</array>
 	<key>CFBundleVersion</key>
-	<string>3.0.0</string>
+	<string>6.0.0</string>
 	<key>LSApplicationQueriesSchemes</key>
 	<array>
 		<string>http</string>
@@ -54,6 +54,8 @@
 	</array>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>Se requiere acceso a la cámara para capturar fotos y enviarlas a tus contactos de emergencia durante una alerta.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
 	<string>Tu ubicación en segundo plano es necesaria para enviar actualizaciones de ubicación durante una alerta activa, incluso cuando la aplicación no está en primer plano. Esto es esencial para la funcionalidad de emergencia.</string>
 	<key>NSLocationAlwaysUsageDescription</key>
@@ -67,8 +69,6 @@
 	<string>Tu ubicación es necesaria para enviar actualizaciones a tus contactos de emergencia durante una alerta. Esta información solo se usa cuando la aplicación está abierta.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Se requiere acceso al micrófono para grabar y enviar audio a tus contactos de emergencia durante una alerta.</string>
-	<key>NSCameraUsageDescription</key>
-	<string>Se requiere acceso a la cámara para capturar fotos y enviarlas a tus contactos de emergencia durante una alerta.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Se requiere acceso a la biblioteca de fotos para guardar grabaciones de audio para evidencia.</string>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
