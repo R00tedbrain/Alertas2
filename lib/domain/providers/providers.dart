@@ -15,9 +15,11 @@ import '../../core/services/config_service.dart';
 import '../../core/services/iap_service.dart';
 import '../../core/services/location_service.dart';
 import '../../core/services/permission_service.dart';
+import '../../core/services/police_station_service.dart';
 import '../../core/services/telegram_service.dart';
 import '../../data/models/app_config.dart';
 import '../../data/models/emergency_contact.dart';
+import '../../data/models/police_station.dart';
 import '../../data/models/purchase_state.dart';
 
 // Providers de Servicios
@@ -37,6 +39,9 @@ final backgroundServiceProvider = Provider<BackgroundAlertService>(
   (ref) => BackgroundAlertService(),
 );
 final iapServiceProvider = Provider<IAPService>((ref) => IAPService.instance);
+final policeStationServiceProvider = Provider<PoliceStationService>(
+  (ref) => PoliceStationService(),
+);
 
 // Provider para verificar el token de Telegram
 final verifyTelegramTokenProvider = FutureProvider.autoDispose<bool>((
@@ -164,6 +169,25 @@ final appInitializationProvider = FutureProvider<bool>((ref) async {
     } catch (e) {
       print('Error al inicializar IAP Service: $e');
       failedServices.add('IAP');
+      // No fallamos toda la app por esto
+    }
+
+    // Inicializar servicio de comisarías de policía (precargar datos)
+    try {
+      final policeStationService = ref.read(policeStationServiceProvider);
+      // Precargar datos en background sin bloquear la inicialización
+      policeStationService
+          .preloadMajorCities()
+          .then((_) {
+            print('✅ Datos de comisarías precargados');
+          })
+          .catchError((e) {
+            print('⚠️ Error precargando datos de comisarías: $e');
+          });
+      initializedServices.add('PoliceStations');
+    } catch (e) {
+      print('Error al inicializar Police Station Service: $e');
+      failedServices.add('PoliceStations');
       // No fallamos toda la app por esto
     }
 
@@ -805,4 +829,194 @@ final isInTrialProvider = Provider<bool>((ref) {
     loading: () => false,
     error: (_, __) => false,
   );
+});
+
+// =============================================================================
+// PROVIDERS DE COMISARÍAS DE POLICÍA
+// =============================================================================
+
+/// Provider para buscar comisarías de policía cercanas
+final nearbyPoliceStationsProvider =
+    FutureProvider.family<List<PoliceStation>, Map<String, dynamic>>((
+      ref,
+      params,
+    ) async {
+      final policeStationService = ref.read(policeStationServiceProvider);
+      final latitude = params['latitude'] as double;
+      final longitude = params['longitude'] as double;
+      final radiusMeters = params['radiusMeters'] as int? ?? 5000;
+      final filterTypes = params['filterTypes'] as List<PoliceType>?;
+      final forceRefresh = params['forceRefresh'] as bool? ?? false;
+
+      return await policeStationService.findNearbyPoliceStations(
+        latitude: latitude,
+        longitude: longitude,
+        radiusMeters: radiusMeters,
+        filterTypes: filterTypes,
+        forceRefresh: forceRefresh,
+      );
+    });
+
+/// Provider para obtener una comisaría específica por ID
+final policeStationByIdProvider = FutureProvider.family<PoliceStation?, String>(
+  (ref, id) async {
+    final policeStationService = ref.read(policeStationServiceProvider);
+    return await policeStationService.getPoliceStationById(id);
+  },
+);
+
+/// Provider para obtener estadísticas del cache
+final policeStationCacheStatsProvider = FutureProvider<Map<String, dynamic>>((
+  ref,
+) async {
+  final policeStationService = ref.read(policeStationServiceProvider);
+  return await policeStationService.getCacheStats();
+});
+
+/// StateNotifier para manejar el estado de búsqueda de comisarías
+class PoliceStationSearchNotifier
+    extends StateNotifier<PoliceStationSearchState> {
+  final PoliceStationService _policeStationService;
+
+  PoliceStationSearchNotifier(this._policeStationService)
+    : super(PoliceStationSearchState.initial());
+
+  /// Buscar comisarías cercanas
+  Future<void> searchNearbyStations({
+    required double latitude,
+    required double longitude,
+    int radiusMeters = 5000,
+    List<PoliceType>? filterTypes,
+    bool forceRefresh = false,
+  }) async {
+    state = state.copyWith(isLoading: true, error: null);
+
+    try {
+      final stations = await _policeStationService.findNearbyPoliceStations(
+        latitude: latitude,
+        longitude: longitude,
+        radiusMeters: radiusMeters,
+        filterTypes: filterTypes,
+        forceRefresh: forceRefresh,
+      );
+
+      state = state.copyWith(
+        stations: stations,
+        isLoading: false,
+        error: null,
+        lastSearchLatitude: latitude,
+        lastSearchLongitude: longitude,
+        lastSearchRadius: radiusMeters,
+        lastSearchTypes: filterTypes,
+      );
+    } catch (e) {
+      state = state.copyWith(isLoading: false, error: e.toString());
+    }
+  }
+
+  /// Actualizar filtros
+  void updateFilters(List<PoliceType>? filterTypes) {
+    final currentStations = state.stations;
+    if (currentStations.isEmpty) return;
+
+    List<PoliceStation> filteredStations = currentStations;
+
+    if (filterTypes != null && filterTypes.isNotEmpty) {
+      filteredStations =
+          currentStations
+              .where((station) => filterTypes.contains(station.type))
+              .toList();
+    }
+
+    state = state.copyWith(
+      stations: filteredStations,
+      lastSearchTypes: filterTypes,
+    );
+  }
+
+  /// Limpiar búsqueda
+  void clearSearch() {
+    state = PoliceStationSearchState.initial();
+  }
+
+  /// Forzar actualización
+  Future<void> forceRefresh() async {
+    if (state.lastSearchLatitude != null && state.lastSearchLongitude != null) {
+      await searchNearbyStations(
+        latitude: state.lastSearchLatitude!,
+        longitude: state.lastSearchLongitude!,
+        radiusMeters: state.lastSearchRadius,
+        filterTypes: state.lastSearchTypes,
+        forceRefresh: true,
+      );
+    }
+  }
+}
+
+/// Provider para el notifier de búsqueda de comisarías
+final policeStationSearchProvider = StateNotifierProvider<
+  PoliceStationSearchNotifier,
+  PoliceStationSearchState
+>((ref) {
+  final policeStationService = ref.read(policeStationServiceProvider);
+  return PoliceStationSearchNotifier(policeStationService);
+});
+
+/// Estado de búsqueda de comisarías
+class PoliceStationSearchState {
+  final List<PoliceStation> stations;
+  final bool isLoading;
+  final String? error;
+  final double? lastSearchLatitude;
+  final double? lastSearchLongitude;
+  final int lastSearchRadius;
+  final List<PoliceType>? lastSearchTypes;
+
+  const PoliceStationSearchState({
+    required this.stations,
+    required this.isLoading,
+    this.error,
+    this.lastSearchLatitude,
+    this.lastSearchLongitude,
+    this.lastSearchRadius = 5000,
+    this.lastSearchTypes,
+  });
+
+  factory PoliceStationSearchState.initial() {
+    return const PoliceStationSearchState(stations: [], isLoading: false);
+  }
+
+  PoliceStationSearchState copyWith({
+    List<PoliceStation>? stations,
+    bool? isLoading,
+    String? error,
+    double? lastSearchLatitude,
+    double? lastSearchLongitude,
+    int? lastSearchRadius,
+    List<PoliceType>? lastSearchTypes,
+  }) {
+    return PoliceStationSearchState(
+      stations: stations ?? this.stations,
+      isLoading: isLoading ?? this.isLoading,
+      error: error,
+      lastSearchLatitude: lastSearchLatitude ?? this.lastSearchLatitude,
+      lastSearchLongitude: lastSearchLongitude ?? this.lastSearchLongitude,
+      lastSearchRadius: lastSearchRadius ?? this.lastSearchRadius,
+      lastSearchTypes: lastSearchTypes ?? this.lastSearchTypes,
+    );
+  }
+}
+
+/// Provider para verificar si las comisarías están disponibles (función premium)
+final policeStationsAvailableProvider = Provider<bool>((ref) {
+  final hasPremium = ref.watch(hasPremiumProvider);
+  final isInTrial = ref.watch(isInTrialProvider);
+
+  return hasPremium || isInTrial;
+});
+
+/// Provider para precargar datos de ciudades principales
+final preloadPoliceStationsProvider = FutureProvider<void>((ref) async {
+  final policeStationService = ref.read(policeStationServiceProvider);
+  await policeStationService.preloadMajorCities();
 });

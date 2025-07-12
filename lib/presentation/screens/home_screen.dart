@@ -14,6 +14,7 @@ import '../widgets/contacts_list.dart';
 import '../widgets/app_drawer.dart';
 import 'settings_screen.dart';
 import 'remove_ads_screen.dart';
+import 'police_stations_screen.dart';
 
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
@@ -59,6 +60,11 @@ class HomeScreen extends ConsumerWidget {
 
                 // Estado premium
                 _buildPremiumStatusCard(context, ref),
+
+                const SizedBox(height: 16),
+
+                // Función premium: comisarías de policía
+                _buildPoliceStationsCard(context, ref),
 
                 const SizedBox(height: 16),
 
@@ -466,6 +472,193 @@ class HomeScreen extends ConsumerWidget {
             ],
           ),
     );
+  }
+
+  // Tarjeta para promocionar las comisarías de policía
+  Widget _buildPoliceStationsCard(BuildContext context, WidgetRef ref) {
+    final hasPremium = ref.watch(hasPremiumProvider);
+    final isInTrial = ref.watch(isInTrialProvider);
+
+    if (hasPremium || isInTrial) {
+      // Si tiene premium o está en trial, mostrar acceso directo
+      return Card(
+        elevation: 2,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+          side: BorderSide(color: Colors.blue.shade200, width: 1),
+        ),
+        child: Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            gradient: LinearGradient(
+              colors: [Colors.blue.shade50, Colors.blue.shade100],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.shade600,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(
+                    Icons.local_police,
+                    color: Colors.white,
+                    size: 24,
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Comisarías Cercanas',
+                        style: GoogleFonts.roboto(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.blue.shade800,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Encuentra la comisaría de policía más cercana',
+                        style: TextStyle(
+                          color: Colors.blue.shade700,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const PoliceStationsScreen(),
+                      ),
+                    );
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.blue.shade600,
+                    foregroundColor: Colors.white,
+                    minimumSize: const Size(80, 32),
+                  ),
+                  child: const Text('Buscar', style: TextStyle(fontSize: 12)),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    } else {
+      // Si no tiene premium, mostrar promoción
+      return Card(
+        elevation: 2,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+          side: BorderSide(color: Colors.purple.shade200, width: 1),
+        ),
+        child: Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            gradient: LinearGradient(
+              colors: [Colors.purple.shade50, Colors.purple.shade100],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.purple.shade600,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(
+                    Icons.local_police,
+                    color: Colors.white,
+                    size: 24,
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Text(
+                            'Comisarías Cercanas',
+                            style: GoogleFonts.roboto(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.purple.shade800,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.orange.shade600,
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: const Text(
+                              'PREMIUM',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 8,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Localiza comisarías, llama y navega directamente',
+                        style: TextStyle(
+                          color: Colors.purple.shade700,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const RemoveAdsScreen(),
+                      ),
+                    );
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.purple.shade600,
+                    foregroundColor: Colors.white,
+                    minimumSize: const Size(80, 32),
+                  ),
+                  child: const Text('Premium', style: TextStyle(fontSize: 12)),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
   }
 
   // Muestra un diálogo para añadir un contacto

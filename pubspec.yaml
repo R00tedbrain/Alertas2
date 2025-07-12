@@ -55,6 +55,7 @@ dependencies:
   
   # API HTTP para comunicación
   dio: ^5.4.0
+  http: ^1.1.0
   
   # Servicios en segundo plano
   flutter_background_service: ^5.0.5

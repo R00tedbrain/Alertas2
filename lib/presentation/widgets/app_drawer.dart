@@ -7,6 +7,7 @@ import '../screens/terms_of_use_screen.dart';
 import '../screens/privacy_policy_screen.dart';
 import '../screens/remove_ads_screen.dart';
 import '../screens/my_location_screen.dart';
+import '../screens/police_stations_screen.dart';
 import '../screens/debug_console_screen.dart';
 
 class AppDrawer extends StatelessWidget {
@@ -107,6 +108,22 @@ class AppDrawer extends StatelessWidget {
                         context,
                         MaterialPageRoute(
                           builder: (context) => const MyLocationScreen(),
+                        ),
+                      );
+                    },
+                  ),
+
+                  _buildDrawerItem(
+                    context,
+                    icon: Icons.local_police,
+                    title: 'Comisarías Cercanas',
+                    subtitle: 'Encuentra comisarías de policía (Premium)',
+                    onTap: () {
+                      Navigator.of(context).pop();
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const PoliceStationsScreen(),
                         ),
                       );
                     },
