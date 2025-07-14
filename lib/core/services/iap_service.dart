@@ -24,6 +24,12 @@ class IAPService {
   static IAPService get instance => _instance ??= IAPService._();
   IAPService._();
 
+  // Callback para notificar estado de restauración
+  Function(bool)? _onRestoreStateChanged;
+
+  // Callback para notificar errores al usuario
+  Function(String)? _onErrorOccurred;
+
   // IDs de productos (deben coincidir con los configurados en las stores)
   static const String _trialProductId = '7_day_trial';
   static const String _monthlyProductId = 'premium_monthly';
@@ -63,6 +69,16 @@ class IAPService {
   IAPProduct? get trialProduct => _products[_trialProductId];
   IAPProduct? get monthlyProduct => _products[_monthlyProductId];
   IAPProduct? get yearlyProduct => _products[_yearlyProductId];
+
+  /// Configurar callback para estado de restauración
+  void setRestoreStateCallback(Function(bool) callback) {
+    _onRestoreStateChanged = callback;
+  }
+
+  /// Configurar callback para errores
+  void setErrorCallback(Function(String) callback) {
+    _onErrorOccurred = callback;
+  }
 
   /// Inicializar el servicio
   Future<bool> initialize() async {
@@ -247,24 +263,38 @@ class IAPService {
 
     try {
       print('🔄 IAPService: Restaurando compras...');
+      _debugLogger.info(_tag, 'Iniciando restauración manual de compras');
+
+      // Notificar inicio de restauración
+      _onRestoreStateChanged?.call(true);
 
       // Actualizar estado a pendiente
       _updateSubscriptionState(
         _currentSubscription.copyWith(state: PurchaseState.pending),
       );
 
+      _debugLogger.info(_tag, 'Llamando a restorePurchases() de la tienda');
       await _inAppPurchase.restorePurchases();
+
+      _debugLogger.info(
+        _tag,
+        'Restauración iniciada - esperando respuesta de la tienda',
+      );
 
       // La respuesta llegará a través del stream de compras
       return true;
     } catch (e) {
       print('❌ IAPService: Error restaurando compras: $e');
+      _debugLogger.error(_tag, 'Error en restauración manual: $e');
       _updateSubscriptionState(
         _currentSubscription.copyWith(
           state: PurchaseState.error,
           errorMessage: 'Error restaurando compras: $e',
         ),
       );
+
+      // Notificar fin de restauración
+      _onRestoreStateChanged?.call(false);
       return false;
     }
   }
@@ -290,10 +320,18 @@ class IAPService {
     print(
       '🔄 IAPService: Procesando actualización para ${purchaseDetails.productID}',
     );
+    _debugLogger.info(
+      _tag,
+      'Procesando actualización: ${purchaseDetails.productID}, estado: ${purchaseDetails.status}',
+    );
 
     switch (purchaseDetails.status) {
       case PurchaseStatus.pending:
         print('⏳ IAPService: Compra pendiente: ${purchaseDetails.productID}');
+        _debugLogger.info(
+          _tag,
+          'Estado: PENDIENTE para ${purchaseDetails.productID}',
+        );
         _updateSubscriptionState(
           _currentSubscription.copyWith(state: PurchaseState.pending),
         );
@@ -304,11 +342,27 @@ class IAPService {
         print(
           '✅ IAPService: Compra exitosa/restaurada: ${purchaseDetails.productID}',
         );
+        _debugLogger.success(
+          _tag,
+          purchaseDetails.status == PurchaseStatus.restored
+              ? 'RESTAURADA: ${purchaseDetails.productID}'
+              : 'COMPRADA: ${purchaseDetails.productID}',
+        );
         _handleSuccessfulPurchase(purchaseDetails);
+
+        // Notificar fin de restauración si fue una restauración
+        if (purchaseDetails.status == PurchaseStatus.restored) {
+          _debugLogger.info(_tag, 'Notificando fin de restauración');
+          _onRestoreStateChanged?.call(false);
+        }
         break;
 
       case PurchaseStatus.error:
         print('❌ IAPService: Error en compra: ${purchaseDetails.error}');
+        _debugLogger.error(
+          _tag,
+          'ERROR: ${purchaseDetails.productID} - ${purchaseDetails.error?.message ?? 'Error desconocido'}',
+        );
         _updateSubscriptionState(
           _currentSubscription.copyWith(
             state: PurchaseState.error,
@@ -319,6 +373,7 @@ class IAPService {
 
       case PurchaseStatus.canceled:
         print('🚫 IAPService: Compra cancelada por usuario');
+        _debugLogger.warning(_tag, 'CANCELADA: ${purchaseDetails.productID}');
         _updateSubscriptionState(
           _currentSubscription.copyWith(state: PurchaseState.cancelled),
         );
@@ -639,18 +694,28 @@ class IAPService {
   /// Manejar errores de compra
   void _onPurchaseError(dynamic error) {
     print('❌ IAPService: Error en stream de compras: $error');
+    _debugLogger.error(_tag, 'Error en stream de compras: $error');
+
+    final errorMessage = 'Error en proceso de compra: $error';
+
     _updateSubscriptionState(
       _currentSubscription.copyWith(
         state: PurchaseState.error,
-        errorMessage: 'Error en proceso de compra: $error',
+        errorMessage: errorMessage,
       ),
     );
+
+    // Notificar error al usuario
+    _onErrorOccurred?.call(errorMessage);
   }
 
   /// Validar compras existentes
   Future<void> _validateExistingPurchases() async {
     try {
       print('🔍 IAPService: Iniciando validación de compras existentes...');
+
+      // Notificar inicio de restauración automática
+      _onRestoreStateChanged?.call(true);
 
       // Para iOS, validar con StoreKit
       if (Platform.isIOS) {
@@ -665,8 +730,20 @@ class IAPService {
       }
 
       print('✅ IAPService: Validación de compras existentes completada');
+
+      // Notificar fin de restauración automática
+      _onRestoreStateChanged?.call(false);
     } catch (e) {
       print('❌ IAPService: Error validando compras existentes: $e');
+      _debugLogger.error(_tag, 'Error validando compras existentes: $e');
+
+      // Notificar fin de restauración en caso de error
+      _onRestoreStateChanged?.call(false);
+
+      // Notificar error al usuario
+      _onErrorOccurred?.call(
+        'Error al validar compras existentes. Intenta restaurar manualmente.',
+      );
     }
   }
 
@@ -674,13 +751,16 @@ class IAPService {
   Future<void> _validateIOSPurchases() async {
     try {
       print('🍎 IAPService: Restaurando compras para iOS...');
+      _debugLogger.info(_tag, 'Iniciando restauración iOS automática');
 
       // Restaurar compras automáticamente para iOS
       await _inAppPurchase.restorePurchases();
 
       print('✅ IAPService: Validación iOS completada');
+      _debugLogger.success(_tag, 'Restauración iOS automática completada');
     } catch (e) {
       print('❌ IAPService: Error validando iOS: $e');
+      _debugLogger.error(_tag, 'Error en restauración iOS: $e');
     }
   }
 
@@ -688,13 +768,16 @@ class IAPService {
   Future<void> _validateAndroidPurchases() async {
     try {
       print('🤖 IAPService: Restaurando compras para Android...');
+      _debugLogger.info(_tag, 'Iniciando restauración Android automática');
 
       // Restaurar compras automáticamente
       await _inAppPurchase.restorePurchases();
 
       print('✅ IAPService: Validación Android completada');
+      _debugLogger.success(_tag, 'Restauración Android automática completada');
     } catch (e) {
       print('❌ IAPService: Error validando Android: $e');
+      _debugLogger.error(_tag, 'Error en restauración Android: $e');
     }
   }
 
@@ -812,7 +895,7 @@ class IAPService {
   /// Verificar si el usuario tiene premium activo
   bool get hasPremium {
     final result = _currentSubscription.isValid;
-    _debugLogger.debug(_tag, 'hasPremium = $result');
+    _debugLogger.info(_tag, '🔍 VERIFICACIÓN hasPremium = $result');
     _debugLogger.debug(_tag, '  - isValid: ${_currentSubscription.isValid}');
     _debugLogger.debug(_tag, '  - isActive: ${_currentSubscription.isActive}');
     _debugLogger.debug(
@@ -831,6 +914,17 @@ class IAPService {
       _tag,
       '  - originalTransactionId: ${_currentSubscription.originalTransactionId}',
     );
+
+    // Log crítico para depuración
+    if (result) {
+      _debugLogger.success(_tag, '✅ PREMIUM ACTIVO confirmado');
+    } else {
+      _debugLogger.warning(
+        _tag,
+        '⚠️ PREMIUM NO ACTIVO - verificar suscripción',
+      );
+    }
+
     return result;
   }
 
@@ -839,7 +933,7 @@ class IAPService {
     final result =
         _currentSubscription.isValid &&
         _currentSubscription.productType == ProductType.trial;
-    _debugLogger.debug(_tag, 'isInTrial = $result');
+    _debugLogger.info(_tag, '🔍 VERIFICACIÓN isInTrial = $result');
     _debugLogger.debug(_tag, '  - isValid: ${_currentSubscription.isValid}');
     _debugLogger.debug(
       _tag,
@@ -849,6 +943,14 @@ class IAPService {
       _tag,
       '  - productType == trial: ${_currentSubscription.productType == ProductType.trial}',
     );
+
+    // Log crítico para depuración
+    if (result) {
+      _debugLogger.success(_tag, '✅ TRIAL ACTIVO confirmado');
+    } else {
+      _debugLogger.warning(_tag, '⚠️ TRIAL NO ACTIVO - verificar estado');
+    }
+
     return result;
   }
 

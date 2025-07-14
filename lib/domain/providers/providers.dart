@@ -161,6 +161,18 @@ final appInitializationProvider = FutureProvider<bool>((ref) async {
     // Inicializar servicio de IAP
     try {
       final iapService = ref.read(iapServiceProvider);
+
+      // Configurar callback para estado de restauración
+      iapService.setRestoreStateCallback((isRestoring) {
+        ref.read(isRestoringPurchasesProvider.notifier).state = isRestoring;
+      });
+
+      // Configurar callback para errores
+      iapService.setErrorCallback((errorMessage) {
+        print('⚠️ Error IAP notificado: $errorMessage');
+        ref.read(iapErrorProvider.notifier).state = errorMessage;
+      });
+
       final iapInitialized = await iapService.initialize();
 
       if (iapInitialized) {
@@ -639,6 +651,18 @@ final yearlyProductProvider = FutureProvider<IAPProduct?>((ref) async {
   return iapService.yearlyProduct;
 });
 
+/// Provider para el estado de restauración automática
+final isRestoringPurchasesProvider = StateProvider<bool>((ref) => false);
+
+/// Provider para errores de IAP
+final iapErrorProvider = StateProvider<String?>((ref) => null);
+
+/// Provider para forzar restauración manual
+final manualRestoreProvider =
+    StateNotifierProvider<ManualRestoreNotifier, bool>((ref) {
+      return ManualRestoreNotifier(ref);
+    });
+
 /// Provider para verificar si el usuario tiene premium
 final hasPremiumProvider = Provider<bool>((ref) {
   final subscriptionAsync = ref.watch(premiumSubscriptionProvider);
@@ -1024,3 +1048,28 @@ final preloadPoliceStationsProvider = FutureProvider<void>((ref) async {
   final policeStationService = ref.read(policeStationServiceProvider);
   await policeStationService.preloadMajorCities();
 });
+
+/// Notificador para restauración manual
+class ManualRestoreNotifier extends StateNotifier<bool> {
+  final Ref _ref;
+
+  ManualRestoreNotifier(this._ref) : super(false);
+
+  Future<void> forceRestorePurchases() async {
+    if (state) return; // Ya está restaurando
+
+    state = true;
+
+    try {
+      final iapService = _ref.read(iapServiceProvider);
+      await iapService.restorePurchases();
+
+      // Esperar un poco para que se procesen las compras
+      await Future.delayed(const Duration(seconds: 2));
+    } catch (e) {
+      print('Error en restauración manual: $e');
+    } finally {
+      state = false;
+    }
+  }
+}

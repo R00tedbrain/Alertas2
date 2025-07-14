@@ -19,6 +19,7 @@ import '../services/location_service.dart';
 import '../services/telegram_service.dart';
 import '../services/config_service.dart';
 import '../services/camera_service.dart';
+import '../services/debug_logger.dart';
 import '../../data/models/app_config.dart';
 import '../../data/models/emergency_contact.dart';
 
@@ -43,6 +44,10 @@ Future<void> _completeBGTask(MethodChannel channel) async {
 // Anotación crucial para que la clase sea accesible desde código nativo
 @pragma('vm:entry-point')
 class BackgroundAlertService {
+  // Debug logger
+  static const String _tag = 'BackgroundAlertService';
+  static final DebugLogger _debugLogger = DebugLogger.instance;
+
   // Servicios
   final LocationService _locationService = LocationService();
   final AudioService _audioService = AudioService();
@@ -963,15 +968,29 @@ class BackgroundAlertService {
       ) async {
         try {
           _log('⏳ Timer de audio activado, iniciando grabación');
+          _debugLogger.info(
+            'AudioTimer',
+            '⏳ Timer de audio activado, iniciando grabación',
+          );
+
+          // Continuar con la grabación de audio directamente
 
           // Para iOS, manejar la sesión de audio con más cuidado
           bool canRecordAudio = true;
 
           if (Platform.isIOS) {
+            _debugLogger.debug(
+              'AudioTimer',
+              'Plataforma iOS detectada, configurando sesión especial',
+            );
             try {
               // Reinicializar el servicio de audio antes de cada grabación en iOS
               // Esto es crítico para solucionar el problema
               _log('Preparando servicio de audio para iOS antes de grabar');
+              _debugLogger.info(
+                'AudioTimer',
+                'Preparando servicio de audio para iOS antes de grabar',
+              );
 
               // Liberar recursos del grabador anterior pero no desactivar la sesión
               // Es importante evitar crear/destruir sesiones de audio repetidamente en iOS
@@ -1041,15 +1060,44 @@ class BackgroundAlertService {
             audioAttempts++;
             try {
               _log('Intento $audioAttempts de grabación de audio');
+              _debugLogger.info(
+                'AudioTimer',
+                'Intento $audioAttempts de grabación de audio',
+              );
               _log('Grabando audio durante $recordingDuration segundos');
+              _debugLogger.debug(
+                'AudioTimer',
+                'Llamando audioService.startRecording($recordingDuration)',
+              );
+
               audioPath = await audioService.startRecording(recordingDuration);
+
+              if (audioPath != null) {
+                _debugLogger.success(
+                  'AudioTimer',
+                  'Grabación exitosa en intento $audioAttempts: $audioPath',
+                );
+              } else {
+                _debugLogger.warning(
+                  'AudioTimer',
+                  'Grabación falló en intento $audioAttempts',
+                );
+              }
 
               if (audioPath == null && audioAttempts < 3) {
                 _log('Reintento $audioAttempts de grabación de audio');
+                _debugLogger.warning(
+                  'AudioTimer',
+                  'Reintento $audioAttempts de grabación de audio - esperando 2s',
+                );
                 await Future.delayed(const Duration(seconds: 2));
               }
             } catch (e) {
               _log('Error en intento $audioAttempts de grabación: $e');
+              _debugLogger.error(
+                'AudioTimer',
+                'Error en intento $audioAttempts de grabación: $e',
+              );
               if (audioAttempts < 3) {
                 await Future.delayed(const Duration(seconds: 2));
               }
@@ -1058,6 +1106,10 @@ class BackgroundAlertService {
 
           if (audioPath != null) {
             _log('Audio grabado en: $audioPath');
+            _debugLogger.success(
+              'AudioTimer',
+              'Audio grabado exitosamente en: $audioPath',
+            );
 
             // Verificar que el archivo realmente existe
             final audioFile = File(audioPath);

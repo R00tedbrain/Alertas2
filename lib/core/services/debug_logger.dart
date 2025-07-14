@@ -59,6 +59,16 @@ class DebugLogger {
   void success(String tag, String message) =>
       log(LogLevel.success, tag, message);
 
+  /// Método estático rápido para problemas de audio
+  static void logAudioIssue(String message) {
+    instance.error('AUDIO_DEBUG', '🎤 $message');
+  }
+
+  /// Método estático rápido para éxito de audio
+  static void logAudioSuccess(String message) {
+    instance.success('AUDIO_DEBUG', '🎤 $message');
+  }
+
   /// Limpiar todos los logs
   void clear() {
     _logs.clear();

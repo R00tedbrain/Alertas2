@@ -7,6 +7,7 @@ import 'package:flutter_spinkit/flutter_spinkit.dart';
 import '../../domain/providers/providers.dart';
 import '../../data/models/app_config.dart';
 import '../../data/models/emergency_contact.dart';
+import '../../core/constants/app_constants.dart';
 import '../widgets/alert_button.dart';
 import '../widgets/status_card.dart';
 import '../widgets/location_card.dart';
@@ -19,6 +20,11 @@ import 'police_stations_screen.dart';
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
 
+  // Obtener nombre de la tienda según la plataforma
+  String _getPlatformStore() {
+    return AppConstants.platformStoreName;
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final appConfig = ref.watch(appConfigProvider);
@@ -28,6 +34,34 @@ class HomeScreen extends ConsumerWidget {
     // Verificar permisos cuando se construye la pantalla
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _checkPermissions(context, ref);
+    });
+
+    // Escuchar errores de IAP
+    ref.listen<String?>(iapErrorProvider, (previous, next) {
+      if (next != null && next.isNotEmpty) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(next, style: GoogleFonts.nunito()),
+              backgroundColor: Colors.red,
+              duration: const Duration(seconds: 5),
+              action: SnackBarAction(
+                label: 'Reintentar',
+                textColor: Colors.white,
+                onPressed: () {
+                  final manualRestore = ref.read(
+                    manualRestoreProvider.notifier,
+                  );
+                  manualRestore.forceRestorePurchases();
+                },
+              ),
+            ),
+          );
+
+          // Limpiar el error después de mostrarlo
+          ref.read(iapErrorProvider.notifier).state = null;
+        });
+      }
     });
 
     return Scaffold(
@@ -60,6 +94,9 @@ class HomeScreen extends ConsumerWidget {
 
                 // Estado premium
                 _buildPremiumStatusCard(context, ref),
+
+                // Botón de restauración manual
+                _buildManualRestoreButton(context, ref),
 
                 const SizedBox(height: 16),
 
@@ -171,6 +208,68 @@ class HomeScreen extends ConsumerWidget {
       builder: (context, ref, child) {
         final premiumAsync = ref.watch(premiumSubscriptionProvider);
         final hasPremium = ref.watch(hasPremiumProvider);
+        final isRestoring = ref.watch(isRestoringPurchasesProvider);
+        final isManualRestoring = ref.watch(manualRestoreProvider);
+
+        // Mostrar indicador de restauración cuando esté restaurando
+        if (isRestoring || isManualRestoring) {
+          return Card(
+            elevation: 2,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+              side: BorderSide(color: Colors.blue.shade200, width: 1),
+            ),
+            child: Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(12),
+                gradient: LinearGradient(
+                  colors: [Colors.blue.shade50, Colors.blue.shade100],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Row(
+                  children: [
+                    const SizedBox(
+                      width: 24,
+                      height: 24,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation<Color>(Colors.blue),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Restaurando compras...',
+                            style: GoogleFonts.roboto(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.blue.shade800,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Verificando tu subscripción desde ${_getPlatformStore()}',
+                            style: GoogleFonts.roboto(
+                              fontSize: 12,
+                              color: Colors.blue.shade600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        }
 
         return premiumAsync.when(
           loading: () => const SizedBox.shrink(),
@@ -364,6 +463,54 @@ class HomeScreen extends ConsumerWidget {
           },
         );
       },
+    );
+  }
+
+  // Botón de restauración manual
+  Widget _buildManualRestoreButton(BuildContext context, WidgetRef ref) {
+    final isRestoring = ref.watch(isRestoringPurchasesProvider);
+    final isManualRestoring = ref.watch(manualRestoreProvider);
+    final hasPremium = ref.watch(hasPremiumProvider);
+
+    // No mostrar si ya tiene premium o si está restaurando
+    if (hasPremium || isRestoring || isManualRestoring) {
+      return const SizedBox.shrink();
+    }
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: OutlinedButton.icon(
+        onPressed: () async {
+          final manualRestore = ref.read(manualRestoreProvider.notifier);
+          await manualRestore.forceRestorePurchases();
+
+          // Mostrar mensaje de confirmación
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  'Restauración completada. Si tienes una subscripción activa, debería aparecer ahora.',
+                  style: GoogleFonts.nunito(),
+                ),
+                backgroundColor: Colors.green,
+                duration: const Duration(seconds: 4),
+              ),
+            );
+          }
+        },
+        icon: const Icon(Icons.refresh, size: 16),
+        label: Text(
+          'Actualizar estado de subscripción',
+          style: GoogleFonts.nunito(fontSize: 14, fontWeight: FontWeight.w500),
+        ),
+        style: OutlinedButton.styleFrom(
+          foregroundColor: Colors.blue.shade600,
+          side: BorderSide(color: Colors.blue.shade300),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          padding: const EdgeInsets.symmetric(vertical: 12),
+        ),
+      ),
     );
   }
 
