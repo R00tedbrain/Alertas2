@@ -20,12 +20,15 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   final _tokenController = TextEditingController();
   final _contactNameController = TextEditingController();
   final _contactChatIdController = TextEditingController();
+  final _contactWhatsAppController = TextEditingController();
+
   final _formKey = GlobalKey<FormState>();
 
   @override
   void initState() {
     super.initState();
-    _tokenController.text = ref.read(appConfigProvider).telegramBotToken;
+    final appConfig = ref.read(appConfigProvider);
+    _tokenController.text = appConfig.telegramBotToken;
   }
 
   @override
@@ -33,6 +36,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     _tokenController.dispose();
     _contactNameController.dispose();
     _contactChatIdController.dispose();
+    _contactWhatsAppController.dispose();
     super.dispose();
   }
 
@@ -55,6 +59,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 _buildSectionTitle('Token del Bot de Telegram'),
                 _buildTokenInput(),
                 const SizedBox(height: 24),
+
+                // Configuración de WhatsApp (Solo Premium)
+                if (ref.watch(hasPremiumProvider)) ...[
+                  _buildSectionTitle('Notificaciones WhatsApp (Premium)'),
+                  _buildWhatsAppPremiumInfo(),
+                  const SizedBox(height: 24),
+                ],
 
                 // Configuración de intervalos
                 _buildSectionTitle('Configuración de Alerta'),
@@ -213,6 +224,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   }
 
   Widget _buildAddContactForm() {
+    final appConfig = ref.watch(appConfigProvider);
+    final whatsAppContactsCount =
+        appConfig.emergencyContacts
+            .where((contact) => contact.whatsappEnabled)
+            .length;
+
     return Card(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: Padding(
@@ -220,11 +237,23 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            Row(
+              children: [
+                const Icon(Icons.person_add, color: Colors.blue),
+                const SizedBox(width: 8),
+                const Text(
+                  'Nuevo Contacto de Emergencia',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
             TextFormField(
               controller: _contactNameController,
               decoration: const InputDecoration(
                 labelText: 'Nombre del contacto',
                 hintText: 'Ej: Familiar 1',
+                prefixIcon: Icon(Icons.person),
               ),
               validator: (value) {
                 if (value == null || value.isEmpty) {
@@ -233,12 +262,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 return null;
               },
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 12),
             TextFormField(
               controller: _contactChatIdController,
               decoration: const InputDecoration(
-                labelText: 'Chat ID',
+                labelText: 'Chat ID (Telegram)',
                 hintText: 'ID proporcionado por el bot',
+                prefixIcon: Icon(Icons.telegram),
               ),
               keyboardType: TextInputType.number,
               validator: (value) {
@@ -248,6 +278,56 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 return null;
               },
             ),
+            const SizedBox(height: 12),
+            TextFormField(
+              controller: _contactWhatsAppController,
+              decoration: InputDecoration(
+                labelText: 'Número WhatsApp (Opcional)',
+                hintText: '+34612345678',
+                prefixIcon: const Icon(Icons.phone),
+                suffixText: whatsAppContactsCount >= 3 ? 'Máximo 3' : null,
+                suffixStyle: TextStyle(
+                  color: whatsAppContactsCount >= 3 ? Colors.red : Colors.grey,
+                ),
+              ),
+              keyboardType: TextInputType.phone,
+              enabled: whatsAppContactsCount < 3,
+              validator: (value) {
+                if (value != null && value.isNotEmpty) {
+                  if (whatsAppContactsCount >= 3) {
+                    return 'Máximo 3 contactos WhatsApp permitidos';
+                  }
+                  if (!RegExp(r'^\+[1-9]\d{1,14}$').hasMatch(value)) {
+                    return 'Formato inválido. Ej: +34612345678';
+                  }
+                }
+                return null;
+              },
+            ),
+            const SizedBox(height: 16),
+            if (whatsAppContactsCount >= 3)
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.orange.shade100,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.warning, color: Colors.orange.shade700),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Máximo 3 contactos WhatsApp. Elimina uno para añadir otro.',
+                        style: TextStyle(
+                          color: Colors.orange.shade700,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             const SizedBox(height: 16),
             ElevatedButton.icon(
               onPressed: _addContact,
@@ -286,7 +366,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         final contact = contacts[index];
         return Card(
           margin: const EdgeInsets.symmetric(vertical: 4.0),
-          child: ListTile(
+          child: ExpansionTile(
             leading: CircleAvatar(
               backgroundColor: Colors.blue.shade100,
               child: Text(
@@ -298,11 +378,75 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               ),
             ),
             title: Text(contact.name),
-            subtitle: Text('Chat ID: ${contact.chatId}'),
+            subtitle: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (contact.telegramEnabled)
+                  Row(
+                    children: [
+                      const Icon(Icons.telegram, size: 16, color: Colors.blue),
+                      const SizedBox(width: 4),
+                      Text('Telegram: ${contact.chatId}'),
+                    ],
+                  ),
+                if (contact.whatsappEnabled && contact.whatsappNumber != null)
+                  Row(
+                    children: [
+                      const Icon(Icons.phone, size: 16, color: Colors.green),
+                      const SizedBox(width: 4),
+                      Text('WhatsApp: ${contact.whatsappNumber}'),
+                    ],
+                  ),
+              ],
+            ),
             trailing: IconButton(
               icon: const Icon(Icons.delete, color: Colors.red),
               onPressed: () => _removeContact(contact),
             ),
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(Icons.telegram, color: Colors.blue),
+                        const SizedBox(width: 8),
+                        const Text('Telegram'),
+                        const Spacer(),
+                        Switch(
+                          value: contact.telegramEnabled,
+                          onChanged:
+                              (value) => _toggleContactService(
+                                contact,
+                                'telegram',
+                                value,
+                              ),
+                        ),
+                      ],
+                    ),
+                    if (contact.whatsappNumber != null)
+                      Row(
+                        children: [
+                          const Icon(Icons.phone, color: Colors.green),
+                          const SizedBox(width: 8),
+                          const Text('WhatsApp'),
+                          const Spacer(),
+                          Switch(
+                            value: contact.whatsappEnabled,
+                            onChanged:
+                                (value) => _toggleContactService(
+                                  contact,
+                                  'whatsapp',
+                                  value,
+                                ),
+                          ),
+                        ],
+                      ),
+                  ],
+                ),
+              ),
+            ],
           ),
         );
       },
@@ -332,8 +476,15 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     if (_formKey.currentState!.validate()) {
       final name = _contactNameController.text.trim();
       final chatId = _contactChatIdController.text.trim();
+      final whatsAppNumber = _contactWhatsAppController.text.trim();
 
-      final contact = EmergencyContact(name: name, chatId: chatId);
+      final contact = EmergencyContact(
+        name: name,
+        chatId: chatId,
+        whatsappNumber: whatsAppNumber.isNotEmpty ? whatsAppNumber : null,
+        telegramEnabled: true,
+        whatsappEnabled: whatsAppNumber.isNotEmpty,
+      );
 
       final configNotifier = ref.read(appConfigProvider.notifier);
       configNotifier.addEmergencyContact(contact);
@@ -341,6 +492,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       // Limpiar campos
       _contactNameController.clear();
       _contactChatIdController.clear();
+      _contactWhatsAppController.clear();
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -359,6 +511,36 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       SnackBar(
         content: Text('Contacto ${contact.name} eliminado'),
         backgroundColor: Colors.blue,
+      ),
+    );
+  }
+
+  void _toggleContactService(
+    EmergencyContact contact,
+    String service,
+    bool enabled,
+  ) {
+    final configNotifier = ref.read(appConfigProvider.notifier);
+
+    EmergencyContact updatedContact;
+    if (service == 'telegram') {
+      updatedContact = contact.copyWith(telegramEnabled: enabled);
+    } else if (service == 'whatsapp') {
+      updatedContact = contact.copyWith(whatsappEnabled: enabled);
+    } else {
+      return;
+    }
+
+    // Remover el contacto existente y añadir el actualizado
+    configNotifier.removeEmergencyContact(contact.chatId);
+    configNotifier.addEmergencyContact(updatedContact);
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          '${service.toUpperCase()} ${enabled ? 'activado' : 'desactivado'} para ${contact.name}',
+        ),
+        backgroundColor: enabled ? Colors.green : Colors.orange,
       ),
     );
   }
@@ -453,6 +635,106 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   );
                 }
               },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildWhatsAppPremiumInfo() {
+    return Card(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.verified, color: Colors.green.shade600),
+                const SizedBox(width: 8),
+                const Text(
+                  'WhatsApp Premium',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                ),
+                const Spacer(),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.green.shade100,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    'ACTIVO',
+                    style: TextStyle(
+                      color: Colors.green.shade800,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.blue.shade50,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.blue.shade200),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.info, color: Colors.blue.shade600),
+                  const SizedBox(width: 12),
+                  const Expanded(
+                    child: Text(
+                      'Servicio incluido en Premium. Simplemente añade números de WhatsApp a tus contactos.',
+                      style: TextStyle(fontSize: 14),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Icon(
+                  Icons.check_circle,
+                  color: Colors.green.shade600,
+                  size: 20,
+                ),
+                const SizedBox(width: 8),
+                const Text('Alertas automáticas por WhatsApp'),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Icon(
+                  Icons.check_circle,
+                  color: Colors.green.shade600,
+                  size: 20,
+                ),
+                const SizedBox(width: 8),
+                const Text('Sin configuración técnica necesaria'),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Icon(
+                  Icons.check_circle,
+                  color: Colors.green.shade600,
+                  size: 20,
+                ),
+                const SizedBox(width: 8),
+                const Text('Envío simultáneo con Telegram'),
+              ],
             ),
           ],
         ),

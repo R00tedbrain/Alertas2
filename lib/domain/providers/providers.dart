@@ -17,6 +17,7 @@ import '../../core/services/location_service.dart';
 import '../../core/services/permission_service.dart';
 import '../../core/services/police_station_service.dart';
 import '../../core/services/telegram_service.dart';
+import '../../core/services/whatsapp_centralized_service.dart';
 import '../../data/models/app_config.dart';
 import '../../data/models/emergency_contact.dart';
 import '../../data/models/police_station.dart';
@@ -41,6 +42,9 @@ final backgroundServiceProvider = Provider<BackgroundAlertService>(
 final iapServiceProvider = Provider<IAPService>((ref) => IAPService.instance);
 final policeStationServiceProvider = Provider<PoliceStationService>(
   (ref) => PoliceStationService(),
+);
+final whatsappCentralizedServiceProvider = Provider<WhatsAppCentralizedService>(
+  (ref) => WhatsAppCentralizedService(),
 );
 
 // Provider para verificar el token de Telegram

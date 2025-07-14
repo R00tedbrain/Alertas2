@@ -3,11 +3,17 @@
   "emergency_contacts": [
     {
       "name": "Contacto de Emergencia 1",
-      "chat_id": "12345678"
+      "chat_id": "12345678",
+      "whatsapp_number": "",
+      "telegram_enabled": true,
+      "whatsapp_enabled": false
     },
     {
       "name": "Contacto de Emergencia 2",
-      "chat_id": "87654321"
+      "chat_id": "87654321",
+      "whatsapp_number": "",
+      "telegram_enabled": true,
+      "whatsapp_enabled": false
     }
   ],
   "alert_settings": {

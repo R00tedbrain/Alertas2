@@ -1,0 +1,92 @@
+version: '3.8'
+
+services:
+  # API Backend
+  whatsapp-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: alertatelegram-whatsapp-api
+    ports:
+      - "4000:4000"  # Puerto diferente para evitar conflictos
+    environment:
+      - NODE_ENV=production
+      - PORT=4000
+      - DATABASE_URL=postgresql://whatsapp_user:***REMOVED***@db:5432/alertatelegram_whatsapp
+      - JWT_SECRET=***REMOVED***
+      - WHATSAPP_ACCESS_TOKEN=***REMOVED***
+      - WHATSAPP_PHONE_NUMBER_ID=***REMOVED***
+      - WHATSAPP_BUSINESS_ACCOUNT_ID=***REMOVED***
+      - API_BASE_URL=https://graph.facebook.com/v21.0
+      - LOG_LEVEL=info
+    depends_on:
+      - db
+      - redis
+    networks:
+      - whatsapp-network
+    restart: unless-stopped
+    volumes:
+      - ./logs:/app/logs
+
+  # Base de Datos PostgreSQL
+  db:
+    image: postgres:15-alpine
+    container_name: alertatelegram-whatsapp-db
+    ports:
+      - "5434:5432"  # Puerto diferente para evitar conflictos
+    environment:
+      - POSTGRES_DB=alertatelegram_whatsapp
+      - POSTGRES_USER=whatsapp_user
+      - POSTGRES_PASSWORD=***REMOVED***
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - whatsapp-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U whatsapp_user -d alertatelegram_whatsapp"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Redis para cache y rate limiting
+  redis:
+    image: redis:7-alpine
+    container_name: alertatelegram-whatsapp-redis
+    ports:
+      - "6380:6379"  # Puerto diferente para evitar conflictos
+    volumes:
+      - redis_data:/data
+    networks:
+      - whatsapp-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Nginx para proxy reverso (opcional)
+  nginx:
+    image: nginx:alpine
+    container_name: alertatelegram-whatsapp-nginx
+    ports:
+      - "4080:80"   # Puerto diferente para evitar conflictos
+      - "4443:443"  # Puerto diferente para HTTPS
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf
+      - ./ssl:/etc/nginx/ssl
+    depends_on:
+      - whatsapp-api
+    networks:
+      - whatsapp-network
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  whatsapp-network:
+    driver: bridge 
