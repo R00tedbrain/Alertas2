@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../domain/providers/providers.dart';
 import '../../data/models/purchase_state.dart';
+import '../../core/constants/app_constants.dart';
 
 class TrialScreen extends ConsumerStatefulWidget {
   const TrialScreen({super.key});
@@ -231,12 +232,12 @@ class _TrialScreenState extends ConsumerState<TrialScreen> {
           ),
           _buildAfterTrialItem(
             icon: Icons.star,
-            text: 'Funciones premium: €2.99/mes',
+            text: 'Funciones premium: ${AppConstants.monthlyPrice}/mes',
             color: Colors.orange,
           ),
           _buildAfterTrialItem(
             icon: Icons.star,
-            text: 'Plan anual: €19.99/año (44% ahorro)',
+            text: 'Plan anual: ${AppConstants.yearlyPrice}/año (44% ahorro)',
             color: Colors.orange,
           ),
         ],
@@ -314,11 +315,20 @@ class _TrialScreenState extends ConsumerState<TrialScreen> {
           ),
           const SizedBox(height: 8),
           Text(
-            '• Al tocar "Iniciar Prueba Gratuita" procesaremos tu compra gratuita a través del App Store.\n'
-            '• Tendrás acceso completo a funciones premium durante 7 días.\n'
-            '• Después del período de prueba, las funciones premium requerirán suscripción.\n'
-            '• Las funciones básicas de la app permanecen siempre gratuitas.\n'
-            '• Puedes cancelar en cualquier momento desde la configuración de tu cuenta.',
+            AppConstants.isIOS
+                ? '• Al tocar "Iniciar Prueba Gratuita" procesaremos tu compra gratuita a través del ${AppConstants.platformStoreName}.\n'
+                    '• Tendrás acceso completo a funciones premium durante 7 días.\n'
+                    '• Después del período de prueba, las funciones premium requerirán suscripción:\n'
+                    '  - ${AppConstants.monthlyTitle}: ${AppConstants.monthlyPrice}/${AppConstants.monthlyDuration}\n'
+                    '  - ${AppConstants.yearlyTitle}: ${AppConstants.yearlyPrice}/${AppConstants.yearlyDuration}\n'
+                    '• Las funciones básicas de la app permanecen siempre gratuitas.\n'
+                    '• Puedes cancelar en cualquier momento desde la configuración de tu cuenta.\n'
+                    '• Términos de uso: ${AppConstants.appleTermsUrl}'
+                : '• Al tocar "Iniciar Prueba Gratuita" procesaremos tu compra gratuita a través del ${AppConstants.platformStoreName}.\n'
+                    '• Tendrás acceso completo a funciones premium durante 7 días.\n'
+                    '• Después del período de prueba, las funciones premium requerirán suscripción.\n'
+                    '• Las funciones básicas de la app permanecen siempre gratuitas.\n'
+                    '• Puedes cancelar en cualquier momento desde la configuración de tu cuenta.',
             style: TextStyle(
               fontSize: 12,
               color: Colors.grey[600],

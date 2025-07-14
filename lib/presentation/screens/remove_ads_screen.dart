@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_spinkit/flutter_spinkit.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../domain/providers/providers.dart';
 import '../../data/models/purchase_state.dart';
+import '../../core/constants/app_constants.dart';
 
 class RemoveAdsScreen extends ConsumerStatefulWidget {
   const RemoveAdsScreen({super.key});
@@ -350,8 +352,9 @@ class _RemoveAdsScreenState extends ConsumerState<RemoveAdsScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Título
           Text(
-            'Información',
+            'Información de Suscripción',
             style: GoogleFonts.nunito(
               fontSize: 18,
               fontWeight: FontWeight.bold,
@@ -359,15 +362,95 @@ class _RemoveAdsScreenState extends ConsumerState<RemoveAdsScreen> {
             ),
           ),
           const SizedBox(height: 12),
+
+          // Información específica por plataforma
           Text(
-            '• La suscripción se renovará automáticamente\n• Puedes cancelar en cualquier momento\n• El pago se cargará a tu cuenta de App Store/Play Store\n• Gestiona tu suscripción desde la configuración de tu dispositivo',
+            AppConstants.isIOS
+                ? '• Título de suscripción: ${AppConstants.monthlyTitle} / ${AppConstants.yearlyTitle}\n'
+                    '• Duración: ${AppConstants.monthlyDuration} / ${AppConstants.yearlyDuration}\n'
+                    '• Precio: ${AppConstants.monthlyPrice}/mes y ${AppConstants.yearlyPrice}/año\n'
+                    '• La suscripción se renovará automáticamente\n'
+                    '• Puedes cancelar en cualquier momento\n'
+                    '• El pago se cargará a tu cuenta de ${AppConstants.platformStoreName}\n'
+                    '• Gestiona tu suscripción desde la configuración de tu dispositivo'
+                : '• La suscripción se renovará automáticamente\n'
+                    '• Puedes cancelar en cualquier momento\n'
+                    '• El pago se cargará a tu cuenta de ${AppConstants.platformStoreName}\n'
+                    '• Gestiona tu suscripción desde la configuración de tu dispositivo',
             style: GoogleFonts.nunito(
               fontSize: 14,
               color: Colors.grey.shade700,
               height: 1.5,
             ),
           ),
+
+          // Enlaces requeridos para iOS
+          if (AppConstants.isIOS) ...[
+            const SizedBox(height: 16),
+            Text(
+              'Enlaces Requeridos',
+              style: GoogleFonts.nunito(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: Colors.grey.shade800,
+              ),
+            ),
+            const SizedBox(height: 8),
+            _buildLinkButton(
+              'Política de Privacidad',
+              AppConstants.privacyPolicyUrl,
+              Icons.privacy_tip,
+            ),
+            const SizedBox(height: 8),
+            _buildLinkButton(
+              'Términos de Uso (EULA)',
+              AppConstants.appleTermsUrl,
+              Icons.description,
+            ),
+          ],
         ],
+      ),
+    );
+  }
+
+  Widget _buildLinkButton(String text, String url, IconData icon) {
+    return InkWell(
+      onTap: () async {
+        final uri = Uri.parse(url);
+        if (await canLaunchUrl(uri)) {
+          await launchUrl(uri, mode: LaunchMode.externalApplication);
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('No se pudo abrir el enlace: $url'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+        decoration: BoxDecoration(
+          color: Colors.blue.shade50,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: Colors.blue.shade200),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, size: 16, color: Colors.blue.shade600),
+            const SizedBox(width: 8),
+            Text(
+              text,
+              style: GoogleFonts.nunito(
+                fontSize: 14,
+                color: Colors.blue.shade700,
+                decoration: TextDecoration.underline,
+              ),
+            ),
+            const Spacer(),
+            Icon(Icons.open_in_new, size: 16, color: Colors.blue.shade600),
+          ],
+        ),
       ),
     );
   }
@@ -914,7 +997,7 @@ class _RemoveAdsScreenState extends ConsumerState<RemoveAdsScreen> {
           ),
           const SizedBox(height: 12),
           Text(
-            'Nota: Las compras se restauran automáticamente desde tu cuenta de App Store o Google Play.',
+            'Nota: Las compras se restauran automáticamente desde tu cuenta de ${AppConstants.platformStoreName}.',
             textAlign: TextAlign.center,
             style: GoogleFonts.nunito(
               fontSize: 12,
