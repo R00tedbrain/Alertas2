@@ -146,13 +146,13 @@ class AlertButton extends ConsumerWidget {
 
     if (status.isPermanentlyDenied) {
       message =
-          'Has denegado permanentemente el permiso de micrófono. Para usar esta función, debes habilitarlo manualmente en la configuración de tu dispositivo.';
+          'Esta aplicación necesita acceso al micrófono para grabar audio durante una emergencia.\n\nPuedes habilitarlo en: Configuración > Privacidad y Seguridad > Micrófono > AlertaTelegram';
     } else if (status.isDenied) {
       message =
-          'Esta aplicación requiere acceso al micrófono para grabar audio durante una emergencia. Por favor, permite el acceso al micrófono para continuar.';
+          'Esta aplicación necesita acceso al micrófono para grabar audio durante una emergencia.\n\nPuedes habilitarlo en: Configuración > Privacidad y Seguridad > Micrófono > AlertaTelegram';
     } else {
       message =
-          'No se pudo acceder al micrófono. Por favor, verifica los permisos en la configuración de la aplicación.';
+          'No se puede acceder al micrófono. Por favor, verifica los permisos en la configuración de la aplicación.';
     }
 
     showDialog(
@@ -160,11 +160,11 @@ class AlertButton extends ConsumerWidget {
       barrierDismissible: false,
       builder:
           (context) => AlertDialog(
-            title: const Text('Permiso de Micrófono Requerido'),
+            title: const Text('Acceso al Micrófono Requerido'),
             content: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(Icons.mic_off, color: Colors.red, size: 48),
+                const Icon(Icons.mic_off, color: Colors.blue, size: 48),
                 const SizedBox(height: 16),
                 Text(message),
               ],
@@ -172,24 +172,15 @@ class AlertButton extends ConsumerWidget {
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(context),
-                child: const Text('Cancelar'),
+                child: const Text('Más tarde'),
               ),
               ElevatedButton(
                 onPressed: () {
                   Navigator.pop(context);
-                  if (status.isPermanentlyDenied) {
-                    // Abrir configuración del dispositivo
-                    permissionService.openSettings();
-                  } else {
-                    // Intentar solicitar el permiso nuevamente
-                    ref.refresh(requestMicrophonePermissionProvider);
-                  }
+                  // Siempre dirigir a configuración, respetando la decisión del usuario
+                  permissionService.openSettings();
                 },
-                child: Text(
-                  status.isPermanentlyDenied
-                      ? 'Abrir Configuración'
-                      : 'Permitir Micrófono',
-                ),
+                child: const Text('Abrir Configuración'),
               ),
             ],
           ),
@@ -201,25 +192,23 @@ class AlertButton extends ConsumerWidget {
       context: context,
       builder:
           (context) => AlertDialog(
-            title: const Text('Permisos necesarios'),
+            title: const Text('Permisos Necesarios'),
             content: const Text(
-              'Para iniciar la alerta, necesitamos permisos de ubicación, '
-              'micrófono y notificaciones. Por favor, otorga estos permisos '
-              'en la configuración de la aplicación.',
+              'Esta aplicación necesita permisos de ubicación, micrófono y notificaciones para funcionar correctamente durante una emergencia.\n\nPuedes habilitarlos en: Configuración > Privacidad y Seguridad > [Permiso específico] > AlertaTelegram',
             ),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(context),
-                child: const Text('Cancelar'),
+                child: const Text('Más tarde'),
               ),
-              TextButton(
+              ElevatedButton(
                 onPressed: () {
                   Navigator.pop(context);
-                  // Abrir configuración de permisos
+                  // Dirigir a configuración respetando la decisión del usuario
                   final permissionService = ref.read(permissionServiceProvider);
                   permissionService.openSettings();
                 },
-                child: const Text('Abrir configuración'),
+                child: const Text('Abrir Configuración'),
               ),
             ],
           ),

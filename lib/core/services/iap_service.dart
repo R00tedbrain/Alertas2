@@ -11,6 +11,7 @@ import 'package:crypto/crypto.dart';
 
 import '../../data/models/purchase_state.dart';
 import 'debug_logger.dart';
+import 'google_play_validator.dart';
 
 /// Servicio de In-App Purchases
 /// Cumple con políticas de Apple App Store y Google Play Store
@@ -86,6 +87,13 @@ class IAPService {
 
     try {
       _debugLogger.info(_tag, 'Iniciando inicialización...');
+
+      // Inicializar validador de Google Play (solo Android)
+      if (Platform.isAndroid) {
+        _debugLogger.info(_tag, 'Inicializando validador de Google Play...');
+        await GooglePlayValidator.instance.initialize();
+        _debugLogger.info(_tag, 'Validador de Google Play inicializado');
+      }
 
       // Verificar disponibilidad de la tienda
       _storeAvailable = await _inAppPurchase.isAvailable();
@@ -300,7 +308,9 @@ class IAPService {
   }
 
   /// Manejar actualizaciones de compra
-  void _onPurchaseUpdate(List<PurchaseDetails> purchaseDetailsList) {
+  Future<void> _onPurchaseUpdate(
+    List<PurchaseDetails> purchaseDetailsList,
+  ) async {
     _debugLogger.info(
       _tag,
       'Recibidas ${purchaseDetailsList.length} actualizaciones de compra',
@@ -311,12 +321,12 @@ class IAPService {
         _tag,
         'Procesando compra: ${purchaseDetails.productID} - Estado: ${purchaseDetails.status}',
       );
-      _processPurchaseUpdate(purchaseDetails);
+      await _processPurchaseUpdate(purchaseDetails);
     }
   }
 
   /// Procesar actualización individual de compra
-  void _processPurchaseUpdate(PurchaseDetails purchaseDetails) {
+  Future<void> _processPurchaseUpdate(PurchaseDetails purchaseDetails) async {
     print(
       '🔄 IAPService: Procesando actualización para ${purchaseDetails.productID}',
     );
@@ -348,7 +358,7 @@ class IAPService {
               ? 'RESTAURADA: ${purchaseDetails.productID}'
               : 'COMPRADA: ${purchaseDetails.productID}',
         );
-        _handleSuccessfulPurchase(purchaseDetails);
+        await _handleSuccessfulPurchase(purchaseDetails);
 
         // Notificar fin de restauración si fue una restauración
         if (purchaseDetails.status == PurchaseStatus.restored) {
@@ -390,7 +400,9 @@ class IAPService {
   }
 
   /// Manejar compra exitosa
-  void _handleSuccessfulPurchase(PurchaseDetails purchaseDetails) {
+  Future<void> _handleSuccessfulPurchase(
+    PurchaseDetails purchaseDetails,
+  ) async {
     _debugLogger.success(
       _tag,
       'Procesando compra exitosa: ${purchaseDetails.productID}',
@@ -400,7 +412,7 @@ class IAPService {
     _debugLogger.info(_tag, 'Tipo de producto: ${productType.name}');
 
     // Validar compra antes de procesar
-    if (!_validatePurchaseDetails(purchaseDetails)) {
+    if (!await _validatePurchaseDetails(purchaseDetails)) {
       _debugLogger.error(
         _tag,
         'Compra inválida rechazada: ${purchaseDetails.productID}',
@@ -477,7 +489,7 @@ class IAPService {
   }
 
   /// Validar detalles de compra (anti-fraude básico)
-  bool _validatePurchaseDetails(PurchaseDetails purchaseDetails) {
+  Future<bool> _validatePurchaseDetails(PurchaseDetails purchaseDetails) async {
     try {
       _debugLogger.info(
         _tag,
@@ -630,8 +642,48 @@ class IAPService {
         );
       }
 
+      // Validación específica para Google Play (solo Android)
+      if (Platform.isAndroid) {
+        _debugLogger.debug(
+          _tag,
+          'Validación 6: Verificando firma de Google Play...',
+        );
+
+        // Obtener datos de verificación de Google Play
+        final String? signature = _getGooglePlaySignature(purchaseDetails);
+        final String? signedData = _getGooglePlaySignedData(purchaseDetails);
+
+        if (signature != null && signedData != null) {
+          final bool isValidSignature = await GooglePlayValidator.instance
+              .validatePurchase(
+                signedData: signedData,
+                signature: signature,
+                productId: purchaseDetails.productID,
+                purchaseToken: purchaseDetails.purchaseID!,
+              );
+
+          if (!isValidSignature) {
+            _debugLogger.error(
+              _tag,
+              'VALIDACIÓN FALLÓ: Firma de Google Play inválida',
+            );
+            return false;
+          }
+
+          _debugLogger.success(
+            _tag,
+            'Validación 6 PASÓ: Firma de Google Play válida',
+          );
+        } else {
+          _debugLogger.warning(
+            _tag,
+            'Validación 6 SALTADA: Datos de firma no disponibles',
+          );
+        }
+      }
+
       // Verificar que no sea una compra duplicada
-      _debugLogger.debug(_tag, 'Validación 6: Verificando compra duplicada...');
+      _debugLogger.debug(_tag, 'Validación 7: Verificando compra duplicada...');
       _debugLogger.debug(
         _tag,
         'Current transaction ID: ${_currentSubscription.originalTransactionId}',
@@ -647,7 +699,7 @@ class IAPService {
         );
         return false;
       }
-      _debugLogger.success(_tag, 'Validación 6 PASÓ: No es compra duplicada');
+      _debugLogger.success(_tag, 'Validación 7 PASÓ: No es compra duplicada');
 
       _debugLogger.success(
         _tag,
@@ -980,6 +1032,47 @@ class IAPService {
 
   /// Obtener días restantes de suscripción
   int get daysRemaining => _currentSubscription.daysRemaining;
+
+  /// Obtener la firma de Google Play desde los detalles de compra
+  String? _getGooglePlaySignature(PurchaseDetails purchaseDetails) {
+    try {
+      // En Android, la firma se encuentra en verificationData.serverVerificationData
+      if (Platform.isAndroid) {
+        final String serverData =
+            purchaseDetails.verificationData.serverVerificationData;
+        if (serverData.isNotEmpty) {
+          // Los datos del servidor contienen la firma en formato JSON
+          final Map<String, dynamic> data = json.decode(serverData);
+          return data['signature'] as String?;
+        }
+      }
+      return null;
+    } catch (e) {
+      _debugLogger.error(_tag, 'Error obteniendo firma de Google Play: $e');
+      return null;
+    }
+  }
+
+  /// Obtener los datos firmados de Google Play desde los detalles de compra
+  String? _getGooglePlaySignedData(PurchaseDetails purchaseDetails) {
+    try {
+      // En Android, los datos firmados se encuentran en verificationData.localVerificationData
+      if (Platform.isAndroid) {
+        final String localData =
+            purchaseDetails.verificationData.localVerificationData;
+        if (localData.isNotEmpty) {
+          return localData;
+        }
+      }
+      return null;
+    } catch (e) {
+      _debugLogger.error(
+        _tag,
+        'Error obteniendo datos firmados de Google Play: $e',
+      );
+      return null;
+    }
+  }
 
   /// Limpiar recursos
   Future<void> dispose() async {

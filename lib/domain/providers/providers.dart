@@ -385,7 +385,7 @@ class AlertStatusNotifier extends StateNotifier<AlertStatus> {
         final backgroundLocationStatus =
             await permissionService.requestBackgroundLocationPermission();
 
-        if (backgroundLocationStatus != LocationPermission.always) {
+        if (!backgroundLocationStatus.isGranted) {
           print(
             'ADVERTENCIA: La ubicación en segundo plano no está configurada como "Siempre"',
           );
@@ -407,27 +407,7 @@ class AlertStatusNotifier extends StateNotifier<AlertStatus> {
         state = state.copyWith(
           statusMessage: 'No se puede iniciar: error al obtener ubicación',
         );
-
-        // Intenta resolver el problema
-        if (Platform.isIOS) {
-          print('Intentando resolver problema de ubicación en iOS...');
-          await Geolocator.openLocationSettings();
-          state = state.copyWith(
-            statusMessage: 'Verificando configuración de ubicación...',
-          );
-          await Future.delayed(const Duration(seconds: 2));
-
-          // Reintentar obtener ubicación
-          final retryPosition = await locationService.getCurrentLocation();
-          if (retryPosition == null) {
-            state = state.copyWith(
-              statusMessage: 'No se pudo resolver el problema de ubicación',
-            );
-            return false;
-          }
-        } else {
-          return false;
-        }
+        return false;
       }
 
       // Verificar que hay contactos configurados

@@ -99,14 +99,10 @@ class PermissionService {
         return status;
       }
 
-      // Si está permanentemente denegado, redirigimos a configuraciones
+      // Si está permanentemente denegado, solo registramos el estado
       if (status.isPermanentlyDenied) {
-        _logger.w(
-          'Permiso de micrófono permanentemente denegado. Abriendo configuración...',
-        );
-        await openAppSettings();
-        // Verificamos nuevamente después de que el usuario regrese de configuraciones
-        return await Permission.microphone.status;
+        _logger.w('Permiso de micrófono permanentemente denegado');
+        return status;
       }
 
       // Solicitamos el permiso
@@ -135,14 +131,10 @@ class PermissionService {
         return status;
       }
 
-      // Si está permanentemente denegado, redirigimos a configuraciones
+      // Si está permanentemente denegado, solo registramos el estado
       if (status.isPermanentlyDenied) {
-        _logger.w(
-          'Permiso de ubicación permanentemente denegado. Abriendo configuración...',
-        );
-        await openAppSettings();
-        // Verificamos nuevamente después de que el usuario regrese de configuraciones
-        return await Permission.location.status;
+        _logger.w('Permiso de ubicación permanentemente denegado');
+        return status;
       }
 
       // Solicitamos el permiso
@@ -171,14 +163,10 @@ class PermissionService {
         return status;
       }
 
-      // Si está permanentemente denegado, redirigimos a configuraciones
+      // Si está permanentemente denegado, solo registramos el estado
       if (status.isPermanentlyDenied) {
-        _logger.w(
-          'Permiso de cámara permanentemente denegado. Abriendo configuración...',
-        );
-        await openAppSettings();
-        // Verificamos nuevamente después de que el usuario regrese de configuraciones
-        return await Permission.camera.status;
+        _logger.w('Permiso de cámara permanentemente denegado');
+        return status;
       }
 
       // Solicitamos el permiso

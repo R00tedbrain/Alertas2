@@ -8,7 +8,6 @@ import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
-import 'package:flutter_background_service_ios/flutter_background_service_ios.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:logger/logger.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -115,6 +114,36 @@ class BackgroundAlertService {
     );
 
     await _notifications.initialize(settings);
+
+    // CRÍTICO: Crear canal de notificación para Android (requerido para servicios en primer plano)
+    if (Platform.isAndroid) {
+      const AndroidNotificationChannel channel = AndroidNotificationChannel(
+        AppConstants.emergencyChannelId,
+        AppConstants.emergencyChannelName,
+        description: AppConstants.emergencyChannelDescription,
+        importance: Importance.high,
+        enableVibration: true,
+        enableLights: true,
+        showBadge: true,
+      );
+
+      final AndroidFlutterLocalNotificationsPlugin? androidPlugin =
+          _notifications
+              .resolvePlatformSpecificImplementation<
+                AndroidFlutterLocalNotificationsPlugin
+              >();
+
+      if (androidPlugin != null) {
+        await androidPlugin.createNotificationChannel(channel);
+        _log(
+          '✅ Canal de notificación creado: ${AppConstants.emergencyChannelId}',
+        );
+      } else {
+        _log(
+          '❌ Error: No se pudo obtener el plugin de Android para notificaciones',
+        );
+      }
+    }
   }
 
   // Configurar servicio en segundo plano
@@ -128,6 +157,11 @@ class BackgroundAlertService {
         initialNotificationTitle: AppConstants.appName,
         initialNotificationContent: 'Preparando servicio de alerta',
         foregroundServiceNotificationId: AppConstants.emergencyNotificationId,
+        foregroundServiceTypes: [
+          AndroidForegroundType.location,
+          AndroidForegroundType.microphone,
+          AndroidForegroundType.dataSync,
+        ],
       ),
       iosConfiguration: IosConfiguration(
         autoStart: false,
@@ -138,6 +172,13 @@ class BackgroundAlertService {
 
     // PASO 1: Iniciar el servicio después de configurarlo
     _log('Iniciando servicio en segundo plano');
+
+    // Para Android: Pequeño retraso para asegurar que la configuración sea estable
+    if (Platform.isAndroid) {
+      _log('⏳ Esperando 500ms para estabilizar configuración en Android...');
+      await Future.delayed(const Duration(milliseconds: 500));
+    }
+
     await _backgroundService.startService();
 
     // Registrar las identificaciones de tarea en iOS
@@ -432,11 +473,21 @@ class BackgroundAlertService {
 
     _log('Servicio en segundo plano iniciado');
 
-    // Servicio para Android
+    // IMPORTANTE: Configurar como servicio en primer plano INMEDIATAMENTE para Android
     if (service is AndroidServiceInstance) {
-      service.setAsForegroundService();
-      service.setAutoStartOnBootMode(true);
-      _log('Configurado como servicio en primer plano (Android)');
+      try {
+        // Configurar inmediatamente para evitar el timeout de 5 segundos
+        await service.setAsForegroundService();
+        service.setAutoStartOnBootMode(true);
+        _log(
+          '✅ Configurado como servicio en primer plano (Android) - INMEDIATO',
+        );
+
+        // Pequeño retraso para asegurar que el servicio se registre correctamente
+        await Future.delayed(const Duration(milliseconds: 100));
+      } catch (e) {
+        _log('❌ Error al configurar servicio en primer plano: $e');
+      }
     }
 
     // Para iOS, enviar una señal inicial de que el servicio está activo
@@ -659,11 +710,11 @@ class BackgroundAlertService {
           _log('ADVERTENCIA: La ubicación en segundo plano no está habilitada');
           _log('Algunas funciones podrían no funcionar correctamente');
 
-          // Intentar solicitar permisos si es posible
+          // Registrar que se necesita configuración manual
           if (permission == LocationPermission.whileInUse) {
-            _log('Intentando solicitar permiso de ubicación always...');
-            final newPermission = await Geolocator.requestPermission();
-            _log('Nuevo estado de permiso: $newPermission');
+            _log(
+              'Permiso de ubicación configurado como "mientras se usa" - se requiere configuración manual para "siempre"',
+            );
           }
         }
 
@@ -1402,9 +1453,17 @@ class BackgroundAlertService {
     _log('Inicializando servicio de Telegram');
     telegramService.initialize(token);
 
-    // En iOS, primero inicializar el servicio de telegram antes que el audio
-    // para evitar problemas de inicialización
-    if (Platform.isIOS) {
+    // OPTIMIZACIÓN ESPECÍFICA POR PLATAFORMA
+    if (Platform.isAndroid) {
+      _log('🚀 Inicialización rápida para Android - evitando retrasos');
+      // Para Android, inicializar directamente sin retrasos innecesarios
+      try {
+        await audioService.initialize();
+        _log('✅ Servicio de audio inicializado rápidamente en Android');
+      } catch (e) {
+        _log('❌ Error al inicializar audio en Android: $e');
+      }
+    } else if (Platform.isIOS) {
       _log('Verificando token de Telegram antes de inicializar audio en iOS');
       try {
         await telegramService.verifyToken();
@@ -1418,13 +1477,11 @@ class BackgroundAlertService {
       _log(
         'La configuración de audio session se manejará a través de audio_session',
       );
-    }
 
-    // Ahora inicializar el audio después del telegram en iOS
-    _log('Inicializando servicio de Audio');
-    try {
-      // En iOS, damos más tiempo entre la verificación del token y la inicialización de audio
-      if (Platform.isIOS) {
+      // Ahora inicializar el audio después del telegram en iOS
+      _log('Inicializando servicio de Audio');
+      try {
+        // En iOS, damos más tiempo entre la verificación del token y la inicialización de audio
         // Este retraso adicional puede evitar conflictos entre sesiones de audio
         await Future.delayed(const Duration(milliseconds: 1200));
         _log(
@@ -1444,52 +1501,42 @@ class BackgroundAlertService {
             _log('ADVERTENCIA: No se pudo obtener permiso de micrófono en iOS');
           }
         }
-      }
 
-      await audioService.initialize();
-      _log('Servicio de audio inicializado correctamente');
-    } catch (e) {
-      _log('Error al inicializar audio: $e');
-      // En iOS, hacer un segundo intento con nueva instancia
-      if (Platform.isIOS) {
+        await audioService.initialize();
+        _log('Servicio de audio inicializado correctamente');
+      } catch (e) {
+        _log('Error al inicializar audio: $e');
+        // En iOS, hacer un segundo intento con nueva instancia
         try {
           _log('Reintentando inicialización de audio para iOS');
 
-          // Liberar recursos completamente antes de reintentar
+          // Liberar recursos del grabador anterior pero no desactivar la sesión
+          // Es importante evitar crear/destruir sesiones de audio repetidamente en iOS
           try {
-            await audioService.dispose();
-            await Future.delayed(const Duration(seconds: 3));
-          } catch (disposeError) {
-            _log('Error al liberar recursos de audio: $disposeError');
-            // Continuamos de todos modos
-          }
+            // Dar tiempo al sistema para liberar recursos anteriores
+            await Future.delayed(const Duration(milliseconds: 800));
 
-          _log('Esperando 3 segundos adicionales antes de reintentar en iOS');
-          await Future.delayed(const Duration(seconds: 3));
-          await audioService.initialize();
-          _log('Audio inicializado en segundo intento');
-        } catch (retryError) {
-          _log(
-            'Fallo en segundo intento de inicialización de audio: $retryError',
-          );
-
-          // Tercer intento con enfoque diferente
-          try {
-            _log('Último intento de inicialización de audio para iOS');
-            await Future.delayed(const Duration(seconds: 4));
-
-            // Para el último intento, simplemente usar la instancia existente
-            _log('Usando instancia existente con inicialización limpia');
-            await audioService.dispose();
-            await Future.delayed(const Duration(seconds: 1));
+            // Inicializar nuevamente
             await audioService.initialize();
-            _log('Audio inicializado en tercer intento');
-          } catch (finalError) {
-            _log(
-              'Todos los intentos de inicialización de audio fallaron: $finalError',
-            );
-            // Continuamos sin audio en último caso
+            _log('Servicio de audio preparado para iOS');
+          } catch (initError) {
+            _log('Error al preparar audio: $initError');
+
+            // Si hubo un error específico con la sesión, intentar una reinicialización completa
+            if (initError.toString().contains('Session')) {
+              try {
+                await Future.delayed(const Duration(seconds: 2));
+                await audioService.dispose();
+                await Future.delayed(const Duration(seconds: 2));
+                await audioService.initialize();
+                _log('Audio reinicializado completamente');
+              } catch (finalError) {
+                _log('Fallo en reinicialización completa: $finalError');
+              }
+            }
           }
+        } catch (e) {
+          _log('Error general al preparar audio en iOS: $e');
         }
       }
     }

@@ -323,15 +323,39 @@ class CameraService {
     _isDisposing = true;
 
     try {
-      await _frontCameraController?.dispose();
-      _frontCameraController = null;
+      // Mejorar liberación de recursos para Android
+      if (_frontCameraController != null) {
+        _logger.d('Liberando controlador de cámara frontal');
+        await _frontCameraController?.dispose();
+        _frontCameraController = null;
+      }
 
-      await _backCameraController?.dispose();
-      _backCameraController = null;
+      if (_backCameraController != null) {
+        _logger.d('Liberando controlador de cámara posterior');
+        await _backCameraController?.dispose();
+        _backCameraController = null;
+      }
+
+      // Forzar limpieza de memoria en Android
+      if (Platform.isAndroid) {
+        _logger.d('Forzando limpieza de memoria en Android');
+        await Future.delayed(const Duration(milliseconds: 100));
+      }
 
       _logger.d('Recursos de cámara liberados');
     } catch (e) {
       _logger.e('Error al liberar recursos de cámara: $e');
+      // En Android, reintentar liberación después de un breve retraso
+      if (Platform.isAndroid) {
+        _logger.d('Reintentando liberación en Android después de error');
+        await Future.delayed(const Duration(milliseconds: 200));
+        try {
+          _frontCameraController = null;
+          _backCameraController = null;
+        } catch (e2) {
+          _logger.e('Error en segundo intento de liberación: $e2');
+        }
+      }
     } finally {
       _isDisposing = false;
     }

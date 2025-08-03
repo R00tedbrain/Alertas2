@@ -24,6 +24,15 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
       color: Colors.blue,
     ),
     OnboardingPage(
+      title: '🔒 Permisos Necesarios',
+      subtitle: 'Tu seguridad es nuestra prioridad',
+      description:
+          '• 📍 Ubicación: Para enviar tu posición exacta a contactos de emergencia\n\n• 🎙️ Micrófono: Para grabar audio durante la emergencia\n\n• 📷 Cámara: Para capturar fotos automáticamente\n\n• 🔔 Notificaciones: Para informarte del estado de las alertas\n\nEstos permisos son esenciales para que la app funcione correctamente durante una emergencia.\n\n⚠️ IMPORTANTE: Sin estos permisos no podrás iniciar el servicio de alerta. Al presionar el botón "Iniciar Alerta" fallará y no se enviará información a tus contactos de emergencia.',
+      icon: Icons.shield_outlined,
+      color: Colors.indigo,
+      isPermissionPage: true,
+    ),
+    OnboardingPage(
       title: '🎯 Prueba GRATIS por 7 días',
       subtitle: 'Sin compromisos, sin pagos',
       description:
@@ -230,6 +239,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
 
   Widget _buildBottomButtons() {
     final bool isLastPage = _currentPage == _pages.length - 1;
+    final bool isPermissionPage = _pages[_currentPage].isPermissionPage;
 
     return Container(
       padding: const EdgeInsets.all(24),
@@ -269,6 +279,43 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
             ),
           ),
 
+          // Permission settings button (only on permission page)
+          if (isPermissionPage) ...[
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              height: 48,
+              child: OutlinedButton(
+                onPressed: _openPermissionSettings,
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: _pages[_currentPage].color,
+                  side: BorderSide(color: _pages[_currentPage].color, width: 2),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.settings,
+                      size: 18,
+                      color: _pages[_currentPage].color,
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Configurar Permisos Ahora',
+                      style: GoogleFonts.nunito(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+
           // Secondary info (only on last page)
           if (isLastPage) ...[
             const SizedBox(height: 16),
@@ -307,6 +354,46 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
               ),
             ),
           ],
+
+          // Permission info (only on permission page)
+          if (isPermissionPage) ...[
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.indigo.shade50,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.indigo.shade200),
+              ),
+              child: Column(
+                children: [
+                  Icon(
+                    Icons.info_outline,
+                    color: Colors.indigo.shade600,
+                    size: 24,
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Configuración Recomendada',
+                    style: GoogleFonts.nunito(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.indigo.shade700,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Puedes configurar los permisos ahora o después en la app',
+                    style: GoogleFonts.nunito(
+                      fontSize: 12,
+                      color: Colors.indigo.shade600,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -323,6 +410,12 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
 
   void _skipOnboarding() {
     _finishOnboarding();
+  }
+
+  void _openPermissionSettings() async {
+    // Abrir configuración de permisos del dispositivo
+    final permissionService = ref.read(permissionServiceProvider);
+    await permissionService.openSettings();
   }
 
   void _finishOnboarding() async {
@@ -345,6 +438,7 @@ class OnboardingPage {
   final String description;
   final IconData icon;
   final Color color;
+  final bool isPermissionPage;
 
   OnboardingPage({
     required this.title,
@@ -352,5 +446,6 @@ class OnboardingPage {
     required this.description,
     required this.icon,
     required this.color,
+    this.isPermissionPage = false,
   });
 }

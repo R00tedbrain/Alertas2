@@ -924,14 +924,14 @@ class HomeScreen extends ConsumerWidget {
       barrierDismissible: false,
       builder: (context) {
         return AlertDialog(
-          title: const Text('Permisos necesarios'),
+          title: const Text('Permisos Necesarios'),
           content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text(
-                  'Para que la aplicación funcione correctamente, se necesitan los siguientes permisos:',
+                  'Esta aplicación necesita los siguientes permisos para funcionar correctamente:',
                   style: TextStyle(fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 16),
@@ -939,7 +939,7 @@ class HomeScreen extends ConsumerWidget {
                   const Text('• Ubicación mientras se usa la app'),
                   const SizedBox(height: 8),
                   const Text(
-                    'Esto permite enviar tu ubicación actual a los contactos de emergencia.',
+                    'Necesario para enviar tu ubicación actual a los contactos de emergencia.',
                     style: TextStyle(fontSize: 12, color: Colors.grey),
                   ),
                   const SizedBox(height: 12),
@@ -948,17 +948,26 @@ class HomeScreen extends ConsumerWidget {
                   const Text('• Ubicación en segundo plano'),
                   const SizedBox(height: 8),
                   const Text(
-                    'Permite enviar actualizaciones de ubicación incluso cuando la app no está abierta. Esto es crucial para el funcionamiento de las alertas.',
+                    'Necesario para enviar actualizaciones de ubicación cuando la app no está abierta. Esto es crucial para el funcionamiento de las alertas.',
                     style: TextStyle(fontSize: 12, color: Colors.grey),
                   ),
                   const SizedBox(height: 12),
                 ],
-                const Text(
-                  'En iOS, primero debes aceptar el permiso "Mientras usas la app" y luego "Siempre" para la ubicación en segundo plano.',
-                  style: TextStyle(
-                    fontStyle: FontStyle.italic,
-                    fontSize: 12,
-                    color: Colors.blue,
+                const SizedBox(height: 8),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.blue.shade200),
+                  ),
+                  child: const Text(
+                    'Puedes habilitar estos permisos en:\nConfiguración > Privacidad y Seguridad > Servicios de Ubicación > AlertaTelegram',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.blue,
+                      fontWeight: FontWeight.w500,
+                    ),
                   ),
                 ),
               ],
@@ -970,21 +979,13 @@ class HomeScreen extends ConsumerWidget {
               child: const Text('Más tarde'),
             ),
             ElevatedButton(
-              onPressed: () async {
+              onPressed: () {
                 Navigator.of(context).pop();
-
+                // Dirigir a configuración respetando la decisión del usuario
                 final permissionService = ref.read(permissionServiceProvider);
-
-                // Para iOS, el flujo debe ser primero 'mientras se usa' y luego 'siempre'
-                if (needsLocation) {
-                  await permissionService.requestLocationPermission();
-                }
-
-                if (needsBackgroundLocation) {
-                  await permissionService.requestBackgroundLocationPermission();
-                }
+                permissionService.openSettings();
               },
-              child: const Text('Solicitar permisos'),
+              child: const Text('Abrir Configuración'),
             ),
           ],
         );

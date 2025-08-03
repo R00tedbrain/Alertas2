@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Google Play License Public Key -->
+    <!-- Esta clave se usa para validar compras IAP en Google Play -->
+    <string name="google_play_license_key">MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA1jMVcJsYZ7Uwx80Tkesi+atmFk3W9fVeHy97UqadcdpMSayFOvHn23lE+rcLVGNqXnjoA50dJjl7zFmqTmmaQECqgrzRrsB34JoyiWuvPPjeTwzJdthWNYS9zrSy4lvVaYq46WJkOhPO0fJse9xzSFosWCFM7O52tSzWWPxDfQ0xXl1BTwIegmQJM3wdq11eyGurSCW3qCsKMYyWyON6nl8pktkVzuN70FoeuEemPXmIGhbLfmzon12lTHAX7LHEQ4sBPiVNQwUMxESMINHA6rLHZz8G7+3SaoccTEJhjDFinoyx4UBfGKztSyHI/zMGQC8OwZ5PVRxNWmbrF04AlQIDAQAB</string>
+</resources> 

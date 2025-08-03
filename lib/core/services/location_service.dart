@@ -25,24 +25,7 @@ class LocationService {
       if (!serviceEnabled) {
         print('ERROR: Los servicios de ubicación están desactivados');
         _logger.e('Los servicios de ubicación están desactivados');
-
-        // Intento de recuperación para iOS
-        if (Platform.isIOS) {
-          print('Intentando abrir configuración de ubicación en iOS...');
-          await Geolocator.openLocationSettings();
-          // Esperamos un poco para dar tiempo al usuario
-          await Future.delayed(const Duration(seconds: 2));
-          // Verificamos nuevamente
-          serviceEnabled = await Geolocator.isLocationServiceEnabled();
-          if (!serviceEnabled) {
-            print(
-              'Servicios de ubicación siguen desactivados después del intento',
-            );
-            return null;
-          }
-        } else {
-          return null;
-        }
+        return null;
       }
 
       // Verificar permisos
@@ -63,12 +46,6 @@ class LocationService {
       if (permission == LocationPermission.deniedForever) {
         print('ERROR: Permisos de ubicación rechazados permanentemente');
         _logger.e('Permisos de ubicación rechazados permanentemente');
-
-        // Intento de abrir configuración para iOS
-        if (Platform.isIOS) {
-          print('Abriendo configuración para revisar permisos en iOS...');
-          await Geolocator.openAppSettings();
-        }
         return null;
       }
 
@@ -166,9 +143,10 @@ class LocationService {
           }
         }
 
-        // Intentar abrir la configuración como último recurso
-        print('Intentando abrir la configuración del dispositivo...');
-        await Geolocator.openLocationSettings();
+        // Registrar el error para diagnóstico
+        print(
+          'Error de ubicación que requiere configuración manual del usuario',
+        );
       }
 
       _logger.e('Error al obtener la ubicación: $e');
@@ -243,13 +221,9 @@ class LocationService {
     // Verificar si los servicios están habilitados
     bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
     if (!serviceEnabled) {
-      try {
-        await Geolocator.openLocationSettings();
-        // Verificar nuevamente después de abrir configuración
-        serviceEnabled = await Geolocator.isLocationServiceEnabled();
-      } catch (e) {
-        print('Error al abrir configuración de ubicación: $e');
-      }
+      print(
+        'Servicios de ubicación deshabilitados - requiere configuración manual',
+      );
     }
 
     // Verificar permiso actual
