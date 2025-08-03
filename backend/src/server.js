@@ -36,9 +36,9 @@ app.use(helmet({
 // CORS configurado para AlertaTelegram
 app.use(cors({
     origin: [
-        'https://***REMOVED***',
-        'https://www.***REMOVED***',
-        'https://api.***REMOVED***',
+        'https://your-domain.com',
+        'https://www.your-domain.com',
+        'https://api.your-domain.com',
         'http://localhost:3000', // Para desarrollo
         'http://localhost:4000'  // Para testing
     ],
@@ -121,7 +121,7 @@ app.get('/info', (req, res) => {
             stats: '/stats/*',
             health: '/health'
         },
-        documentation: 'https://docs.***REMOVED***/whatsapp-api'
+        documentation: 'https://docs.your-domain.com/whatsapp-api'
     });
 });
 

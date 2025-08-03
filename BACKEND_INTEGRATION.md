@@ -266,7 +266,7 @@ ElevatedButton(
 
 ```nginx
 # Configurar dominio real en nginx.conf
-server_name api.***REMOVED***;
+server_name api.your-domain.com;
 
 # Configurar certificados SSL
 ssl_certificate /etc/nginx/ssl/alertatelegram.pem;
@@ -285,7 +285,7 @@ JWT_SECRET=jwt_secret_muy_largo_y_aleatorio_2024
 
 ```dart
 // En whatsapp_centralized_service.dart
-static const String _baseUrl = 'https://api.***REMOVED***';
+static const String _baseUrl = 'https://api.your-domain.com';
 ```
 
 ## 🗄️ Base de Datos
@@ -294,7 +294,7 @@ static const String _baseUrl = 'https://api.***REMOVED***';
 
 ```sql
 Token: test_premium_user_2024
-Email: test@***REMOVED***
+Email: test@your-domain.com
 Premium: Activo por 1 año
 Cuota: 1000 mensajes/mes
 ```

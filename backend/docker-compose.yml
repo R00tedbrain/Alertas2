@@ -12,11 +12,11 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=4000
-      - DATABASE_URL=postgresql://whatsapp_user:***REMOVED***@db:5432/alertatelegram_whatsapp
-      - JWT_SECRET=***REMOVED***
-      - WHATSAPP_ACCESS_TOKEN=***REMOVED***
-      - WHATSAPP_PHONE_NUMBER_ID=***REMOVED***
-      - WHATSAPP_BUSINESS_ACCOUNT_ID=***REMOVED***
+      - DATABASE_URL=postgresql://whatsapp_user:YOUR_SECURE_PASSWORD_HERE@db:5432/alertatelegram_whatsapp
+      - JWT_SECRET=YOUR_JWT_SECRET_HERE
+      - WHATSAPP_ACCESS_TOKEN=YOUR_WHATSAPP_ACCESS_TOKEN_HERE
+      - WHATSAPP_PHONE_NUMBER_ID=YOUR_PHONE_NUMBER_ID_HERE
+      - WHATSAPP_BUSINESS_ACCOUNT_ID=YOUR_BUSINESS_ACCOUNT_ID_HERE
       - API_BASE_URL=https://graph.facebook.com/v21.0
       - LOG_LEVEL=info
     depends_on:
@@ -37,7 +37,7 @@ services:
     environment:
       - POSTGRES_DB=alertatelegram_whatsapp
       - POSTGRES_USER=whatsapp_user
-      - POSTGRES_PASSWORD=***REMOVED***
+      - POSTGRES_PASSWORD=YOUR_SECURE_PASSWORD_HERE
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./init.sql:/docker-entrypoint-initdb.d/init.sql

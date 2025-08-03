@@ -48,8 +48,8 @@ environment:
   - WHATSAPP_ACCESS_TOKEN=TU_TOKEN_DE_WHATSAPP
   - WHATSAPP_PHONE_NUMBER_ID=TU_PHONE_ID
   - WHATSAPP_BUSINESS_ACCOUNT_ID=TU_BUSINESS_ID
-  - DATABASE_URL=postgresql://whatsapp_user:***REMOVED***@db:5432/alertatelegram_whatsapp
-  - JWT_SECRET=***REMOVED***
+  - DATABASE_URL=postgresql://whatsapp_user:YOUR_SECURE_PASSWORD@db:5432/alertatelegram_whatsapp
+  - JWT_SECRET=YOUR_JWT_SECRET_HERE
 ```
 
 ### 3. Desplegar
@@ -82,7 +82,7 @@ curl http://localhost:4000/whatsapp/health
 En `lib/core/services/whatsapp_centralized_service.dart`:
 
 ```dart
-static const String _baseUrl = 'https://api.***REMOVED***'; // Tu dominio
+static const String _baseUrl = 'https://api.your-domain.com'; // Tu dominio
 ```
 
 ### Token de usuario
@@ -163,7 +163,7 @@ X-User-Token: test_premium_user_2024
 
 ```sql
 Token: test_premium_user_2024
-Email: test@***REMOVED***
+Email: test@your-domain.com
 Premium: Activo por 1 año
 Cuota: 1000 mensajes/mes
 ```
@@ -357,8 +357,8 @@ grep -i error logs/combined-$(date +%Y-%m-%d).log
 Tu backend de WhatsApp está configurado y listo para recibir alertas de tu app AlertaTelegram. 
 
 **URLs importantes:**
-- 🌐 API: `https://api.***REMOVED***`
-- 🏥 Health: `https://api.***REMOVED***/health`
-- 📱 WhatsApp: `https://api.***REMOVED***/whatsapp/send-alert`
+- 🌐 API: `https://api.your-domain.com`
+- 🏥 Health: `https://api.your-domain.com/health`  
+- 📱 WhatsApp: `https://api.your-domain.com/whatsapp/send-alert`
 
 **Token de prueba:** `test_premium_user_2024` 

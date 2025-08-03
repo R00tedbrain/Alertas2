@@ -152,7 +152,7 @@ INSERT INTO users (
     subscription_type
 ) VALUES (
     'test_premium_user_2024',
-    'test@***REMOVED***',
+    'test@your-domain.com',
     '123456789',
     TRUE,
     CURRENT_TIMESTAMP + INTERVAL '1 year',

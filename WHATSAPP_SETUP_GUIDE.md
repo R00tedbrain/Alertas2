@@ -133,8 +133,8 @@ Como usuario Premium tienes acceso a:
 - 💬 **Contacto directo** con el equipo
 
 ### Contactar Soporte:
-📧 Email: premium@***REMOVED***
-🌐 Web: ***REMOVED***/soporte
+📧 Email: premium@your-domain.com
+🌐 Web: your-domain.com/soporte
 📱 Desde la app: Configuración → Soporte Premium
 
 ---

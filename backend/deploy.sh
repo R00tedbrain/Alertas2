@@ -207,6 +207,6 @@ echo
 log_warning "📋 TODO para producción:"
 echo "- Configurar HTTPS con certificados SSL"
 echo "- Cambiar contraseñas en docker-compose.yml"
-echo "- Configurar dominio real (api.***REMOVED***)"
+echo "- Configurar dominio real (api.your-domain.com)"
 echo "- Configurar firewall para puertos 4080, 4443"
 echo "- Configurar backup automático de base de datos" 

@@ -43,3 +43,24 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Environment variables and sensitive files
+.env
+.env.local
+.env.production
+backend/.env
+backend/.env.local
+backend/.env.production
+
+# Sensitive configuration
+**/config/local_config.json
+**/sensitive-strings.txt
+**/real_config.json
+
+# BFG Repo Cleaner
+..bfg-report/
+bfg-*.jar
+
+# Personal/sensitive data
+personal_tokens.txt
+real_credentials.txt
